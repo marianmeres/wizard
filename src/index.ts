@@ -73,9 +73,9 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		};
 	});
 
-	const outData = (steps, current) => ({ total: steps.length, steps, current });
-	const currentStepStore = createStore(outData(steps, current));
-	const publish = (steps, current) => currentStepStore.set(outData(steps, current));
+	const outShape = (steps, current) => ({ total: steps.length, steps, current });
+	const stateStore = createStore(outShape(steps, current));
+	const publish = (steps, current) => stateStore.set(outShape(steps, current));
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
@@ -182,8 +182,8 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	//
 	const wizardStore = {
 		context,
-		get: currentStepStore.get,
-		subscribe: currentStepStore.subscribe,
+		get: stateStore.get,
+		subscribe: stateStore.subscribe,
 		next,
 		previous,
 		reset,
