@@ -144,7 +144,7 @@ suite.test('basic happy flow', async () => {
 		assert(steps[current].label === 'one');
 	})();
 
-	// now MUST work (we providin)
+	// now MUST work (since we're providing correct step data which will validate)
 	x = await w.goto(3, [null, { hey: 'ho' }]);
 	assert(x === 3);
 
