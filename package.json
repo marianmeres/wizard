@@ -1,0 +1,56 @@
+{
+  "name": "@marianmeres/wizard",
+  "version": "0.0.1",
+  "description": "Utility for building a wizard like UI.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "browser": "./dist/index.umd.js",
+  "exports": {
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist/*",
+    "prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
+    "release": "release",
+    "test": "node --loader ts-node/esm tests/index.ts",
+    "test:watch": "nodemon --delay 0.5 -q -w \"src/**/*.*\" -w \"tests/**/*.*\" -x \"node --loader ts-node/esm tests/index.ts\" --",
+    "build": "npm run clean && rollup -c",
+    "dev": "npm run clean && rollup -c -w"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marianmeres/wizard.git"
+  },
+  "author": "Marian Meres <marian@meres.sk>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/marianmeres/wizard/issues"
+  },
+  "homepage": "https://github.com/marianmeres/wizard#readme",
+  "devDependencies": {
+    "@marianmeres/clog": "^0.5.0",
+    "@marianmeres/release": "^0.0.7",
+    "@marianmeres/test-runner": "^2.0.13",
+    "@rollup/plugin-commonjs": "^24.0.1",
+    "@rollup/plugin-node-resolve": "^15.0.1",
+    "@rollup/plugin-terser": "^0.4.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@types/node": "^18.14.5",
+    "mkdirp": "^2.1.4",
+    "nodemon": "^2.0.21",
+    "prettier": "^2.8.4",
+    "rimraf": "^4.2.0",
+    "rollup": "^3.18.0",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.5.0",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@marianmeres/store": "^0.1.0"
+  }
+}
