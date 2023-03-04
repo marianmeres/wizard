@@ -61,7 +61,6 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			...step,
 			label: step.label || `${_index + 1}`,
 			data,
-			context,
 			validate: _normalizeFn(step, 'validate'),
 			preNextHook: _normalizeFn(step, 'preNextHook'),
 			prePreviousHook: _normalizeFn(step, 'prePreviousHook'),
