@@ -73,7 +73,12 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		};
 	});
 
-	const outShape = (steps, current) => ({ steps, current, step: steps[current] });
+	const outShape = (steps, current) => ({
+		steps,
+		current,
+		step: steps[current],
+		context,
+	});
 	const stateStore = createStore(outShape(steps, current));
 	const publish = (steps, current) => stateStore.set(outShape(steps, current));
 
@@ -181,7 +186,6 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	//
 	const wizardStore = {
-		context,
 		get: stateStore.get,
 		subscribe: stateStore.subscribe,
 		next,

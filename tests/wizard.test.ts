@@ -10,7 +10,7 @@ const suite = new TestRunner(path.basename(fileURLToPath(import.meta.url)));
 
 const sleep = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-suite.test('basic happy flow', async () => {
+suite.test('basic flow', async () => {
 	const w = createWizardStore('foo', {
 		steps: [
 			{ label: 'one', foo: 123 },
@@ -37,10 +37,16 @@ suite.test('basic happy flow', async () => {
 
 	assert(!w.isDone());
 
-	w.subscribe(async ({ step, steps, current }) => {
+	w.subscribe(async ({ step, steps, current, context }) => {
 		assert(step.foo === 123);
 		assert(step.isFirst);
 		assert(!step.isLast);
+
+		// modifying context works, but I tend to consider it as a bad practice...
+		// for writable data the actual step data suits better
+		context.lets = 'go';
+		// this is better
+		step.lets = 'go';
 	})();
 
 	// proceed
@@ -49,12 +55,17 @@ suite.test('basic happy flow', async () => {
 	assert(x === 1);
 
 	//
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps, current, context }) => {
 		assert(step.label === 'two');
 		assert(step.foo === undefined);
 		assert(step.error === null);
 		assert(!step.isFirst);
 		assert(!step.isLast);
+
+		// modified in previous step
+		assert(context.lets === 'go');
+		// but this should ne used instead
+		assert(steps[current - 1].lets === 'go');
 	})();
 
 	// must NOT proceed - step 1 has validation

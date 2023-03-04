@@ -41,8 +41,8 @@ const wizard = createWizardStore('My wizard', {
 });
 
 //
-wizard.subscribe(({ steps, current }) => {
-    // `steps` is array of step objects with:
+wizard.subscribe(({ step, steps, current, context }) => {
+    // `steps` is array of `step` objects with:
 
     // label: string;
     // data: any; // local writable step data
@@ -55,9 +55,10 @@ wizard.subscribe(({ steps, current }) => {
     // validate, preNextHook, prePreviousHook, preResetHook
 
     // `current` is current step's index
+	// `context` is a reference to factory context option
 
     // e.g render current step
-    someRenderFunction(steps[current]);
+    someRenderFunction(step);
 });
 
 // control flow via:
