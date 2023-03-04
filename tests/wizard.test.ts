@@ -37,10 +37,10 @@ suite.test('basic happy flow', async () => {
 
 	assert(!w.isDone());
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].foo === 123);
-		assert(steps[current].isFirst);
-		assert(!steps[current].isLast);
+	w.subscribe(async ({ step, steps, current }) => {
+		assert(step.foo === 123);
+		assert(step.isFirst);
+		assert(!step.isLast);
 	})();
 
 	// proceed
@@ -49,12 +49,12 @@ suite.test('basic happy flow', async () => {
 	assert(x === 1);
 
 	//
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'two');
-		assert(steps[current].foo === undefined);
-		assert(steps[current].error === null);
-		assert(!steps[current].isFirst);
-		assert(!steps[current].isLast);
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'two');
+		assert(step.foo === undefined);
+		assert(step.error === null);
+		assert(!step.isFirst);
+		assert(!step.isLast);
 	})();
 
 	// must NOT proceed - step 1 has validation
@@ -62,10 +62,10 @@ suite.test('basic happy flow', async () => {
 	assert(!w.isDone());
 	assert(x === 1);
 
-	w.subscribe(({ steps, current }) => {
+	w.subscribe(({ step, steps, current }) => {
 		// clog(current, steps[current]);
-		assert(steps[current].label === 'two'); // not three
-		assert(steps[current].error.validate === false);
+		assert(step.label === 'two'); // not three
+		assert(step.error.validate === false);
 	})();
 
 	// now proceed with correct data that validates
@@ -73,26 +73,26 @@ suite.test('basic happy flow', async () => {
 	assert(!w.isDone());
 	assert(x === 2);
 
-	w.subscribe(({ steps, current }) => {
+	w.subscribe(({ step, steps, current }) => {
 		// clog(current, steps);
-		assert(steps[current].label === 'three');
-		assert(steps[current].error === null);
+		assert(step.label === 'three');
+		assert(step.error === null);
 		// previous error must have been reset
 		assert(steps[current - 1].error === null);
 		// data provided to last next must be saved (in previous step)
 		assert(steps[current - 1].data.hey === 'ho');
-		assert(!steps[current].isFirst);
-		assert(!steps[current].isLast);
+		assert(!step.isFirst);
+		assert(!step.isLast);
 	})();
 
 	x = await w.next();
 	assert(w.isDone());
 	assert(x === 3);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'four');
-		assert(!steps[current].isFirst);
-		assert(steps[current].isLast);
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'four');
+		assert(!step.isFirst);
+		assert(step.isLast);
 	})();
 
 	x = await w.next(); // noop
@@ -100,31 +100,31 @@ suite.test('basic happy flow', async () => {
 	assert(x === 3);
 
 	// still on four
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'four');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'four');
 	})();
 
 	// go back
 	x = await w.previous();
 	assert(x === 2);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'three');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'three');
 	})();
 
 	x = await w.next();
 	assert(x === 3);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'four');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'four');
 	})();
 
 	// same as reset
 	x = await w.goto(0);
 	assert(x === 0);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'one');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'one');
 		// clog(steps, current);
 	})();
 
@@ -132,24 +132,24 @@ suite.test('basic happy flow', async () => {
 	x = await w.goto(3);
 	assert(x === 1);
 
-	w.subscribe(({ steps, current }) => {
+	w.subscribe(({ step, steps, current }) => {
 		// we MUST be at two NOT three
-		assert(steps[current].label === 'two');
+		assert(step.label === 'two');
 	})();
 
 	x = await w.reset();
 	assert(x === 0);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'one');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'one');
 	})();
 
 	// now MUST work (since we're providing correct step data which will validate)
 	x = await w.goto(3, [null, { hey: 'ho' }]);
 	assert(x === 3);
 
-	w.subscribe(({ steps, current }) => {
-		assert(steps[current].label === 'four');
+	w.subscribe(({ step, steps, current }) => {
+		assert(step.label === 'four');
 	})();
 });
 
