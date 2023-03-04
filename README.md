@@ -42,7 +42,8 @@ const wizard = createWizardStore('My wizard', {
 
 //
 wizard.subscribe(({ steps, current }) => {
-    // steps is array of step object with:
+    // `steps` is array of step objects with:
+
     // label: string;
     // data: any; // local writable step data
     // context: any; // wizard "globals"
@@ -53,7 +54,7 @@ wizard.subscribe(({ steps, current }) => {
     // methods (see WizardStep signatures above)
     // validate, preNextHook, prePreviousHook, preResetHook
 
-    // current is current step's index
+    // `current` is current step's index
 
     // e.g render current step
     someRenderFunction(steps[current]);
