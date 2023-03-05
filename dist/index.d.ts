@@ -1,33 +1,43 @@
 type stringify = () => string;
 type Label = string | Record<string, string> | stringify | object;
-interface WizardStep extends Record<string, any> {
+interface WizardStepConfig extends Record<string, any> {
     label: Label;
-    preNextHook?: (stepState: any, { context, setCurrentStepData, wizardStore }: {
+    data?: any;
+    canGoNext?: boolean;
+    preNext?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
         context: any;
-        setCurrentStepData: any;
-        wizardStore: any;
+        setData: any;
+        setError: any;
+        setContext: any;
+        setCanGoNext: any;
+        touch: any;
+        wizard: any;
     }) => Promise<any>;
-    prePreviousHook?: (stepState: any, { context, setCurrentStepData, wizardStore }: {
+    prePrevious?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
         context: any;
-        setCurrentStepData: any;
-        wizardStore: any;
+        setData: any;
+        setError: any;
+        setContext: any;
+        setCanGoNext: any;
+        touch: any;
+        wizard: any;
     }) => Promise<any>;
-    preResetHook?: (stepState: any, { context, setCurrentStepData, wizardStore }: {
+    preReset?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
         context: any;
-        setCurrentStepData: any;
-        wizardStore: any;
-    }) => Promise<any>;
-    validate?: (stepState: any, { context, wizardStore }: {
-        context: any;
-        wizardStore: any;
+        setData: any;
+        setError: any;
+        setContext: any;
+        setCanGoNext: any;
+        touch: any;
+        wizard: any;
     }) => Promise<any>;
 }
 interface CreateWizardStoreOptions {
-    steps: WizardStep[];
+    steps: WizardStepConfig[];
     context?: any;
-    preResetHook?: ({ context, wizardStore }: {
+    preReset?: ({ context, wizard }: {
         context: any;
-        wizardStore: any;
+        wizard: any;
     }) => Promise<any>;
 }
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {

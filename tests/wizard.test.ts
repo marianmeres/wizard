@@ -16,15 +16,14 @@ suite.test('basic flow', async () => {
 			{ label: 'one', foo: 123 },
 			{
 				label: 'two',
-				validate: async (stepState, { context, wizardStore }) => {
-					await sleep(0);
-					// anything other than `true` is considered invalid (we could return an
-					// error map if needed)
-					return stepState.hey === context.hey;
+				canGoNext: false,
+				preNext: async (data, { setCanGoNext, context }) => {
+					setCanGoNext(data.hey === context.hey)
 				},
-				// we want to reset step data on "previous" move
-				prePreviousHook: async (stepState, { setCurrentStepData }) => {
-					setCurrentStepData({}); // reset data
+				// we want to reset state to this step's defaults
+				prePrevious: async (data, { setData, setCanGoNext }) => {
+					setCanGoNext(false);
+					setData({});
 				},
 			},
 			{ label: 'three' },
@@ -37,7 +36,7 @@ suite.test('basic flow', async () => {
 
 	assert(!w.isDone());
 
-	w.subscribe(async ({ step, steps, current, context }) => {
+	w.subscribe(async ({ step, steps, context }) => {
 		assert(step.foo === 123);
 		assert(step.isFirst);
 		assert(!step.isLast);
@@ -55,7 +54,7 @@ suite.test('basic flow', async () => {
 	assert(x === 1);
 
 	//
-	w.subscribe(({ step, steps, current, context }) => {
+	w.subscribe(({ step, steps, context }) => {
 		assert(step.label === 'two');
 		assert(step.foo === undefined);
 		assert(step.error === null);
@@ -65,7 +64,7 @@ suite.test('basic flow', async () => {
 		// modified in previous step
 		assert(context.lets === 'go');
 		// but this should ne used instead
-		assert(steps[current - 1].lets === 'go');
+		assert(steps[step.index - 1].lets === 'go');
 	})();
 
 	// must NOT proceed - step 1 has validation
@@ -73,10 +72,9 @@ suite.test('basic flow', async () => {
 	assert(!w.isDone());
 	assert(x === 1);
 
-	w.subscribe(({ step, steps, current }) => {
-		// clog(current, steps[current]);
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'two'); // not three
-		assert(step.error.validate === false);
+		assert(step.error);
 	})();
 
 	// now proceed with correct data that validates
@@ -84,14 +82,13 @@ suite.test('basic flow', async () => {
 	assert(!w.isDone());
 	assert(x === 2);
 
-	w.subscribe(({ step, steps, current }) => {
-		// clog(current, steps);
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'three');
 		assert(step.error === null);
 		// previous error must have been reset
-		assert(steps[current - 1].error === null);
+		assert(steps[step.index - 1].error === null);
 		// data provided to last next must be saved (in previous step)
-		assert(steps[current - 1].data.hey === 'ho');
+		assert(steps[step.index - 1].data.hey === 'ho');
 		assert(!step.isFirst);
 		assert(!step.isLast);
 	})();
@@ -100,7 +97,7 @@ suite.test('basic flow', async () => {
 	assert(w.isDone());
 	assert(x === 3);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'four');
 		assert(!step.isFirst);
 		assert(step.isLast);
@@ -111,7 +108,7 @@ suite.test('basic flow', async () => {
 	assert(x === 3);
 
 	// still on four
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'four');
 	})();
 
@@ -119,14 +116,14 @@ suite.test('basic flow', async () => {
 	x = await w.previous();
 	assert(x === 2);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'three');
 	})();
 
 	x = await w.next();
 	assert(x === 3);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'four');
 	})();
 
@@ -134,16 +131,15 @@ suite.test('basic flow', async () => {
 	x = await w.goto(0);
 	assert(x === 0);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'one');
-		// clog(steps, current);
 	})();
 
 	// must not work
 	x = await w.goto(3);
 	assert(x === 1);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		// we MUST be at two NOT three
 		assert(step.label === 'two');
 	})();
@@ -151,7 +147,7 @@ suite.test('basic flow', async () => {
 	x = await w.reset();
 	assert(x === 0);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'one');
 	})();
 
@@ -159,9 +155,10 @@ suite.test('basic flow', async () => {
 	x = await w.goto(3, [null, { hey: 'ho' }]);
 	assert(x === 3);
 
-	w.subscribe(({ step, steps, current }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'four');
 	})();
+
 });
 
 export default suite;

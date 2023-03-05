@@ -5,36 +5,49 @@ type stringify = () => string;
 // human readable label (or i18n like shape { locale: label }, or fn )
 type Label = string | Record<string, string> | stringify | object;
 
-interface WizardStep extends Record<string, any> {
+interface WizardStepConfig extends Record<string, any> {
 	label: Label;
-	// wizard action hooks
-	preNextHook?: (stepState, { context, setCurrentStepData, wizardStore }) => Promise<any>; // called before validate)
-	prePreviousHook?: (
-		stepState,
-		{ context, setCurrentStepData, wizardStore }
+	// arbitrary step data, will be reset to initial state on reset action
+	data?: any;
+	// optional helper flag (will default to true if undefined) to indicate whether
+	// wizard can proceed blindly from current to next step. It is a responsibility of the
+	// step to modify this flag once next business conditions are met.
+	canGoNext?: boolean;
+	// wizard action hooks, will be called just before the action. They still can modify
+	// steps state, which can prevent the action (where aplicable).
+	preNext?: (
+		data,
+		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
 	) => Promise<any>;
-	preResetHook?: (
-		stepState,
-		{ context, setCurrentStepData, wizardStore }
+	prePrevious?: (
+		data,
+		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
 	) => Promise<any>;
-	// optional fn to validate current step (and effectively dis/allow to continue)
-	validate?: (stepState, { context, wizardStore }) => Promise<any>;
+	preReset?: (
+		data,
+		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
+	) => Promise<any>;
 }
 
+interface WizardStep extends WizardStepConfig {}
+
 interface CreateWizardStoreOptions {
-	steps: WizardStep[];
-	// **should** be considered readonly... for writable data use step data
+	steps: WizardStepConfig[];
+	// arbitrary global object accessible to all steps, can be modified, but will not be
+	// reset on reset or previous actions (so should be considered more as readonly)
 	context?: any;
-	preResetHook?: ({ context, wizardStore }) => Promise<any>;
+	// optional, for various cleanups if necessary, will be called last (after each step's
+	// preReset)
+	preReset?: ({ context, wizard }) => Promise<any>;
 }
 
 const isFn = (v) => typeof v === 'function';
 
 export const createWizardStore = (label: Label, options: CreateWizardStoreOptions) => {
-	let { steps, context, preResetHook } = {
+	let { steps, context, preReset } = {
 		steps: [],
 		context: {},
-		preResetHook: () => null,
+		preReset: () => null,
 		...(options || {}),
 	};
 
@@ -43,7 +56,6 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	}
 
 	const _normalizeFn = (step, name): any => (isFn(step[name]) ? step[name] : () => true);
-
 	const _deepClone = (data) => JSON.parse(JSON.stringify(data)); // poor man's deep clone
 
 	// current step index
@@ -53,38 +65,29 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	// used for resets
 	let stepsDataBackup = [];
 
-	// normalize steps configs
-	steps = steps.map((step, _index) => {
-		const data = step.data || {};
-		stepsDataBackup[_index] = _deepClone(data);
-		return {
-			...step,
-			label: step.label || `${_index + 1}`,
-			data,
-			validate: _normalizeFn(step, 'validate'),
-			preNextHook: _normalizeFn(step, 'preNextHook'),
-			prePreviousHook: _normalizeFn(step, 'prePreviousHook'),
-			preResetHook: _normalizeFn(step, 'preResetHook'),
-			error: null,
-			index: _index,
-			isFirst: _index === 0,
-			isLast: _index === maxIndex,
-		};
-	});
+	//
+	const outShape = () => ({ steps, step: steps[current], context });
 
-	const outShape = (steps, current) => ({
-		steps,
-		current,
-		step: steps[current],
-		context,
-	});
-	const stateStore = createStore(outShape(steps, current));
-	const publish = (steps, current) => stateStore.set(outShape(steps, current));
+	// a.k.a. publish
+	const touch = (values = null) => {
+		const { data, error, canGoNext } = values || {};
+		if (data !== undefined) steps[current].data = data;
+		if (error !== undefined) steps[current].error = error;
+		if (canGoNext !== undefined) steps[current].canGoNext = !!canGoNext;
+		if (values?.context !== undefined) context = values.context;
+		steps = [...steps];
+		stateStore.set(outShape());
+	};
+
+	const setData = (data) => touch({ data });
+	const setError = (error) => touch({ error });
+	const setContext = (context) => touch({ context });
+	const setCanGoNext = (canGoNext) => touch({ canGoNext });
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
 		// return early if done
-		if (wizardStore.isDone()) return current;
+		if (wizard.isDone()) return current;
 
 		steps[current].data = {
 			// always initial (if any)
@@ -98,30 +101,22 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		// make sure current step error is reset now
 		steps[current].error = null;
 
-		// there might have been a custom step action hook...
-		await steps[current].preNextHook(steps[current].data, {
-			context,
-			wizardStore,
-			setCurrentStepData: (data) => (steps[current].data = data),
-		});
+		// prettier-ignore
+		await steps[current].preNext(
+			steps[current].data,
+			{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
+		);
 
-		//
-		const validate = await steps[current].validate(steps[current].data, {
-			context,
-			wizardStore,
-		});
-
-		// only explicit `true` result is considered valid
-		if (validate === true) {
+		if (steps[current].canGoNext) {
 			current = Math.min(maxIndex, current + 1);
 			steps[current].error = null;
-		}
-		// everything else is considered invalid
-		else {
-			steps[current].error = { validate };
+		} else {
+			// add system custom error if not exist
+			steps[current].error ||=
+				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
 		}
 
-		publish([...steps], current);
+		touch();
 		return current;
 	};
 
@@ -129,15 +124,15 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const previous = async (): Promise<number> => {
 		// always can go back, but it's up to the step to take care of the data
 		// modifications (if needed), such as e.g. reset step data and/or error, etc...
-		await steps[current].prePreviousHook(steps[current].data, {
-			context,
-			wizardStore,
-			setCurrentStepData: (data) => (steps[current].data = data),
-		});
+		// prettier-ignore
+		await steps[current].prePrevious(
+			steps[current].data,
+			{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
+		);
 
 		//
 		current = Math.max(0, current - 1);
-		publish([...steps], current);
+		touch();
 		return current;
 	};
 
@@ -145,7 +140,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const goto = async (index: number, stepsData = []): Promise<string | number> => {
 		if (index < 0 || index > maxIndex) return `Invalid step index ${index}`;
 
-		// goin nowhere?
+		// going nowhere?
 		if (index === current) return;
 
 		// going back...
@@ -158,9 +153,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		else {
 			for (let i = current; i <= index; i++) {
 				await next(stepsData[i]);
-				if (steps[i].error) {
-					return i;
-				}
+				if (steps[i].error) return i;
 			}
 		}
 
@@ -171,20 +164,49 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const reset = async (): Promise<number> => {
 		for (let i = current; i >= 0; i--) {
 			current = i;
-			await steps[current].preResetHook(steps[current].data, {
-				context,
-				wizardStore,
-				setCurrentStepData: (data) => (steps[current].data = data),
-			});
+			// prettier-ignore
+			await steps[current].preReset(
+				steps[current].data,
+				{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
+			);
 		}
-		await preResetHook({ context, wizardStore });
+		await preReset({ context, wizard });
 		stepsDataBackup.forEach((data, idx) => (steps[idx].data = data));
-		publish([...steps], current);
+		touch();
 		return current;
 	};
 
+	// normalize steps shapes
+	steps = steps.map((step, _index) => {
+		const data = step.data || {};
+		stepsDataBackup[_index] = _deepClone(data);
+		return {
+			...step,
+			label: step.label || `${_index + 1}`,
+			index: _index,
+			data,
+			canGoNext: step.canGoNext === undefined ? true : !!step.canGoNext,
+			error: null,
+			isFirst: _index === 0,
+			isLast: _index === maxIndex,
+			preNext: _normalizeFn(step, 'preNext'),
+			prePrevious: _normalizeFn(step, 'prePrevious'),
+			preReset: _normalizeFn(step, 'preReset'),
+			setData,
+			setError,
+			setContext,
+			setCanGoNext,
+			touch,
+			next,
+			previous,
+		};
+	});
+
 	//
-	const wizardStore = {
+	const stateStore = createStore(outShape());
+
+	//
+	const wizard = {
 		get: stateStore.get,
 		subscribe: stateStore.subscribe,
 		next,
@@ -194,5 +216,5 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		isDone: () => current === maxIndex,
 	};
 
-	return wizardStore;
+	return wizard;
 };
