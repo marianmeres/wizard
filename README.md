@@ -1,4 +1,4 @@
-# wizard
+# @marianmeres/wizard
 
 Utility for high level management of [wizard](https://en.wikipedia.org/wiki/Wizard_(software))
 data. Agnostic of the actual business or rendering. [Store](https://github.com/marianmeres/store)
