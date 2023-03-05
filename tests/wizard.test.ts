@@ -63,7 +63,7 @@ suite.test('basic flow', async () => {
 
 		// modified in previous step
 		assert(context.lets === 'go');
-		// but this should ne used instead
+		// but this should be used instead
 		assert(steps[step.index - 1].lets === 'go');
 	})();
 
@@ -74,7 +74,7 @@ suite.test('basic flow', async () => {
 
 	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'two'); // not three
-		assert(step.error);
+		assert(step.error); // has error
 	})();
 
 	// now proceed with correct data that validates
