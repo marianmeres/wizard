@@ -9,7 +9,7 @@ compatible.
 $ npm i @marianmeres/wizard
 ```
 
-## Usage
+## Example usage
 
 ```typescript
 const wizard = createWizardStore('foo', {
@@ -18,14 +18,17 @@ const wizard = createWizardStore('foo', {
         {
             label: 'two',
             canGoNext: false,
-            preNext: async (data, { context, wizard, setData, setError, setContext, setCanGoNext, touch }) => {
+            preNext: async (
+                data,
+                { context, wizard, setData, setError, setContext, setCanGoNext, touch }
+            ) => {
                 setCanGoNext(data.hey === context.hey)
             },
-            prePrevious: async (data, { context, wizard, setData, setError, setContext, setCanGoNext, touch }) => {
+            prePrevious: async (data, { /*...*/ }) => {
                 setCanGoNext(false);
                 setData({});
             },
-            preReset: async (data, { context, wizard, setData, setError, setContext, setCanGoNext, touch }) => {
+            preReset: async (data, { /*...*/ }) => {
                 // ...
             }
         },
@@ -36,29 +39,29 @@ const wizard = createWizardStore('foo', {
 });
 
 wizard.subscribe(async ({ step, steps, context }) => {
-    // do something...
+    // step props
+    const { label, index, data, canGoNext, error, isFirst, isLast } = step;
 
-	// step props
-	const { label, index, data, canGoNext, error, isFirst, isLast } = step;
+    // do something here...
 
-	// step api
+    // step api
     step.setData(/*data*/);
     step.setError(/*error*/);
     step.setContext(/*context*/);
     step.setCanGoNext(/*bool*/);
     step.touch(/*{ data, error, context, canGoNext }*/)
 
-	step.next(data);
-    step.previous();
+    await step.next(data);
+    await step.previous();
 });
 
 // wizard api
-wizard.next(/*data*/);
-wizard.previous();
-wizard.reset();
-wizard.goto(index, stepsData);
+await wizard.next(/*data*/);
+await wizard.previous();
+await wizard.reset();
+await wizard.goto(index, stepsData);
 wizard.isDone();
 
 ```
 
-For now, just see [tests](./tests)...
+See [tests](./tests/wizard.test.ts) for more...

@@ -20,7 +20,7 @@ suite.test('basic flow', async () => {
 				preNext: async (data, { setCanGoNext, context }) => {
 					setCanGoNext(data.hey === context.hey)
 				},
-				// we want to reset state to this step's defaults
+				// we want to reset state on previous click
 				prePrevious: async (data, { setData, setCanGoNext }) => {
 					setCanGoNext(false);
 					setData({});
