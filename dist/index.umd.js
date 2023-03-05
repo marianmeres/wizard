@@ -1,1 +1,137 @@
-!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).wizard={})}(this,(function(e){"use strict";const t=e=>"function"==typeof e,r=(e,r="")=>{if(!t(e))throw new TypeError(`${r} Expecting function arg`.trim())};e.createWizardStore=(e,n)=>{let{steps:o,context:s,preReset:a}={steps:[],context:{},preReset:()=>null,...n||{}};if(!Array.isArray(o)||o.length<2)throw new TypeError(`${e}: expecting array of at least 2 steps configs.`);const i=(e,t)=>"function"==typeof e[t]?e[t]:()=>!0;let c=0;const u=o.length-1;let p=[];const d=()=>({steps:o,step:o[c],context:s}),l=(e=null)=>{const{data:t,error:r,canGoNext:n}=e||{};void 0!==t&&(o[c].data=t),void 0!==r&&(o[c].error=r),void 0!==n&&(o[c].canGoNext=!!n),void 0!==e?.context&&(s=e.context),o=[...o],y.set(d())},x=e=>l({data:e}),f=e=>l({error:e}),b=e=>l({context:e}),h=e=>l({canGoNext:e}),g=async(e=null)=>(N.isDone()||(o[c].data={...p[c],...o[c].data||{},...e||{}},o[c].error=null,await o[c].preNext(o[c].data,{context:s,wizard:N,setData:x,setError:f,setContext:b,setCanGoNext:h,touch:l}),o[c].canGoNext?(c=Math.min(u,c+1),o[c].error=null):o[c].error||="Cannot proceed. Check your step state and/or `canGoNext` flag.",l()),c),w=async()=>(await o[c].prePrevious(o[c].data,{context:s,wizard:N,setData:x,setError:f,setContext:b,setCanGoNext:h,touch:l}),c=Math.max(0,c-1),l(),c);o=o.map(((e,t)=>{const r=e.data||{};return p[t]=(e=>JSON.parse(JSON.stringify(e)))(r),{...e,label:e.label||`${t+1}`,index:t,data:r,canGoNext:void 0===e.canGoNext||!!e.canGoNext,error:null,isFirst:0===t,isLast:t===u,preNext:i(e,"preNext"),prePrevious:i(e,"prePrevious"),preReset:i(e,"preReset"),setData:x,setError:f,setContext:b,setCanGoNext:h,touch:l,next:g,previous:w}}));const y=((e=undefined,n=null)=>{const o=e=>t(n?.persist)&&n.persist(e);let s=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return{publish:(e,r={})=>{t(e).forEach((e=>e(r)))},subscribe:r,subscribeOnce:(e,t)=>{const n=r(e,(e=>{t(e),n()}));return n},unsubscribeAll:t=>e.delete(t)}})(),a=e;o(a);const i=()=>a,c=e=>{a!==e&&(a=e,o(a),s.publish("change",a))};return{set:c,get:i,update:e=>{r(e,"[update]"),c(e(i()))},subscribe:e=>(r(e,"[subscribe]"),e(a),s.subscribe("change",e))}})(d()),N={get:y.get,subscribe:y.subscribe,next:g,previous:w,reset:async()=>{for(let e=c;e>=0;e--)c=e,await o[c].preReset(o[c].data,{context:s,wizard:N,setData:x,setError:f,setContext:b,setCanGoNext:h,touch:l});return await a({context:s,wizard:N}),p.forEach(((e,t)=>o[t].data=e)),l(),c},goto:async(e,t=[])=>{if(e<0||e>u)return`Invalid step index ${e}`;if(e!==c){if(e<c)for(let t=c;t>e;t--)await w();else for(let r=c;r<=e;r++)if(await g(t[r]),o[r].error)return r;return c}},isDone:()=>c===u};return N}}));
+(function (global, factory) {
+    typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+    typeof define === 'function' && define.amd ? define(['exports'], factory) :
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.wizard = {}));
+})(this, (function (exports) { 'use strict';
+
+    const e=e=>"function"==typeof e,r=(r,t="")=>{if(!e(r))throw new TypeError(`${t} Expecting function arg`.trim())},s=(t=undefined,s=null)=>{const n=r=>e(s?.persist)&&s.persist(r);let c=(()=>{const e=new Map,r=r=>(e.has(r)||e.set(r,new Set),e.get(r)),t=(e,t)=>{if("function"!=typeof t)throw new TypeError("Expecting callback function as second argument");return r(e).add(t),()=>r(e).delete(t)};return {publish:(e,t={})=>{r(e).forEach((e=>e(t)));},subscribe:t,subscribeOnce:(e,r)=>{const s=t(e,(e=>{r(e),s();}));return s},unsubscribeAll:r=>e.delete(r)}})(),i=t;n(i);const u=()=>i,o=e=>{i!==e&&(i=e,n(i),c.publish("change",i));};return {set:o,get:u,update:e=>{r(e,"[update]"),o(e(u()));},subscribe:e=>(r(e,"[subscribe]"),e(i),c.subscribe("change",e))}};
+
+    const isFn = (v) => typeof v === 'function';
+    const createWizardStore = (label, options) => {
+        let { steps, context, preReset } = {
+            steps: [],
+            context: {},
+            preReset: () => null,
+            ...(options || {}),
+        };
+        if (!Array.isArray(steps) || steps.length < 2) {
+            throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
+        }
+        const _normalizeFn = (step, name) => (isFn(step[name]) ? step[name] : () => true);
+        const _deepClone = (data) => JSON.parse(JSON.stringify(data));
+        let current = 0;
+        const maxIndex = steps.length - 1;
+        let stepsDataBackup = [];
+        const outShape = () => ({ steps, step: steps[current], context });
+        const touch = (values = null) => {
+            const { data, error, canGoNext } = values || {};
+            if (data !== undefined)
+                steps[current].data = data;
+            if (error !== undefined)
+                steps[current].error = error;
+            if (canGoNext !== undefined)
+                steps[current].canGoNext = !!canGoNext;
+            if (values?.context !== undefined)
+                context = values.context;
+            steps = [...steps];
+            stateStore.set(outShape());
+            return current;
+        };
+        const setData = (data) => touch({ data });
+        const setError = (error) => touch({ error });
+        const setContext = (context) => touch({ context });
+        const setCanGoNext = (canGoNext) => touch({ canGoNext });
+        const next = async (currentStepData = null) => {
+            if (wizard.isDone())
+                return current;
+            steps[current].data = {
+                ...stepsDataBackup[current],
+                ...(steps[current].data || {}),
+                ...(currentStepData || {}),
+            };
+            steps[current].error = null;
+            await steps[current].preNext(steps[current].data, { context, wizard, setData, setError, setContext, setCanGoNext, touch });
+            if (steps[current].canGoNext) {
+                current = Math.min(maxIndex, current + 1);
+                steps[current].error = null;
+            }
+            else {
+                steps[current].error ||=
+                    'Cannot proceed. Check your step state and/or `canGoNext` flag.';
+            }
+            return touch();
+        };
+        const previous = async () => {
+            await steps[current].prePrevious(steps[current].data, { context, wizard, setData, setError, setContext, setCanGoNext, touch });
+            current = Math.max(0, current - 1);
+            return touch();
+        };
+        const goto = async (index, stepsData = []) => {
+            if (index < 0 || index > maxIndex)
+                return `Invalid step index ${index}`;
+            if (index === current)
+                return;
+            if (index < current) {
+                for (let i = current; i > index; i--) {
+                    await previous();
+                }
+            }
+            else {
+                for (let i = current; i <= index; i++) {
+                    await next(stepsData[i]);
+                    if (steps[i].error)
+                        return i;
+                }
+            }
+            return current;
+        };
+        const reset = async () => {
+            for (let i = current; i >= 0; i--) {
+                current = i;
+                await steps[current].preReset(steps[current].data, { context, wizard, setData, setError, setContext, setCanGoNext, touch });
+            }
+            await preReset({ context, wizard });
+            stepsDataBackup.forEach((data, idx) => (steps[idx].data = data));
+            touch();
+            return current;
+        };
+        steps = steps.map((step, _index) => {
+            const data = step.data || {};
+            stepsDataBackup[_index] = _deepClone(data);
+            return {
+                ...step,
+                label: step.label || `${_index + 1}`,
+                index: _index,
+                data,
+                canGoNext: step.canGoNext === undefined ? true : !!step.canGoNext,
+                error: null,
+                isFirst: _index === 0,
+                isLast: _index === maxIndex,
+                preNext: _normalizeFn(step, 'preNext'),
+                prePrevious: _normalizeFn(step, 'prePrevious'),
+                preReset: _normalizeFn(step, 'preReset'),
+                setData,
+                setError,
+                setContext,
+                setCanGoNext,
+                touch,
+                next,
+                previous,
+            };
+        });
+        const stateStore = s(outShape());
+        const wizard = {
+            get: stateStore.get,
+            subscribe: stateStore.subscribe,
+            next,
+            previous,
+            reset,
+            goto,
+            isDone: () => current === maxIndex,
+        };
+        return wizard;
+    };
+
+    exports.createWizardStore = createWizardStore;
+
+}));

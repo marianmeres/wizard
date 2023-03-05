@@ -77,12 +77,13 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		if (values?.context !== undefined) context = values.context;
 		steps = [...steps];
 		stateStore.set(outShape());
+		return current;
 	};
 
 	const setData = (data) => touch({ data });
 	const setError = (error) => touch({ error });
 	const setContext = (context) => touch({ context });
-	const setCanGoNext = (canGoNext) => touch({ canGoNext });
+	const setCanGoNext = (canGoNext: boolean) => touch({ canGoNext });
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
@@ -116,8 +117,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
 		}
 
-		touch();
-		return current;
+		return touch();
 	};
 
 	//
@@ -132,8 +132,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 		//
 		current = Math.max(0, current - 1);
-		touch();
-		return current;
+		return touch();
 	};
 
 	// returned string should be considered as error message

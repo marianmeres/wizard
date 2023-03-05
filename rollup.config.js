@@ -20,7 +20,7 @@ export default [
 			resolve(),   // so Rollup can find `lodash`
 			commonjs(),  // so Rollup can convert `ms` to an ES module
 			typescript(), // so Rollup can convert TypeScript to JavaScript
-			terser(),
+			// terser(),
 		]
 	},
 
@@ -31,7 +31,7 @@ export default [
 			typescript(),
 			commonjs(),
 			resolve(),
-			terser(),
+			// terser(),
 		],
 		output: [
 			{ file: pkg.main, format: 'cjs' },
