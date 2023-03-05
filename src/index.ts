@@ -70,20 +70,44 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	// a.k.a. publish
 	const touch = (values = null) => {
-		const { data, error, canGoNext } = values || {};
-		if (data !== undefined) steps[current].data = data;
-		if (error !== undefined) steps[current].error = error;
-		if (canGoNext !== undefined) steps[current].canGoNext = !!canGoNext;
-		if (values?.context !== undefined) context = values.context;
-		steps = [...steps];
-		stateStore.set(outShape());
+		// return early special case force flag
+		if (values === true) {
+			stateStore.set(outShape());
+			return current;
+		}
+
+		let { data, error, canGoNext } = values || {};
+		let changed = 0;
+		//
+		if (data !== undefined && steps[current].data !== data) {
+			steps[current].data = data;
+			changed++;
+		}
+		//
+		if (error !== undefined && steps[current].error !== error) {
+			steps[current].error = error;
+			changed++;
+		}
+		//
+		canGoNext = !!canGoNext;
+		if (canGoNext !== undefined && steps[current].canGoNext !== canGoNext) {
+			steps[current].canGoNext = canGoNext;
+			changed++;
+		}
+		//
+		if (values?.context !== undefined && values.context !== context) {
+			context = values.context;
+			changed++;
+		}
+		//
+		changed && stateStore.set(outShape());
 		return current;
 	};
 
 	const setData = (data) => touch({ data });
 	const setError = (error) => touch({ error });
 	const setContext = (context) => touch({ context });
-	const setCanGoNext = (canGoNext: boolean) => touch({ canGoNext });
+	const setCanGoNext = (canGoNext: boolean = true) => touch({ canGoNext });
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
@@ -117,7 +141,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
 		}
 
-		return touch();
+		return touch(true);
 	};
 
 	//
@@ -132,7 +156,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 		//
 		current = Math.max(0, current - 1);
-		return touch();
+		return touch(true);
 	};
 
 	// returned string should be considered as error message
@@ -171,7 +195,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		}
 		await preReset({ context, wizard });
 		stepsDataBackup.forEach((data, idx) => (steps[idx].data = data));
-		touch();
+		touch(true);
 		return current;
 	};
 
