@@ -32,7 +32,7 @@ const wizard = createWizardStore('foo', {
         { label: 'four' },
     ],
     context: { hey: 'ho' },
-	onDone: async ({ steps, context }) => '...', // will be called on last .next()
+    onDone: async ({ steps, context }) => '...', // will be called on last .next()
 });
 
 wizard.subscribe(async ({ step, steps }) => {
