@@ -128,9 +128,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			steps[current].error = null;
 		} else {
 			// add system custom error if not exist
-			steps[
-				current
-			].error ||= `Step (${current}): Cannot proceed. Check your step state and/or 'canGoNext' flag.`;
+			steps[current].error ||= `Step (${current}): Cannot proceed.`;
 		}
 
 		// are we done?
