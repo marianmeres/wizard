@@ -64,10 +64,15 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const pre = [];
 
 	//
-	const outShape = () => ({ steps, step: steps[current] });
+	let inProgress = false;
+	const outShape = () => ({ steps, step: steps[current], inProgress });
 
 	// a.k.a. publish
-	const set = (values: { data: any; error: any; canGoNext: boolean } | true = null) => {
+	const set = (
+		values:
+			| { data?: any; error?: any; canGoNext?: boolean; inProgress?: boolean }
+			| true = null
+	) => {
 		// return early special case force flag
 		if (values === true) {
 			stateStore.set(outShape());
@@ -75,7 +80,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		}
 
 		let { data, error, canGoNext } = values || {};
-		canGoNext = !!canGoNext;
+		if (canGoNext !== undefined) canGoNext = !!canGoNext;
 
 		//
 		let changed = 0;
@@ -85,6 +90,12 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				changed++;
 			}
 		});
+
+		//
+		if (values.inProgress !== undefined && values.inProgress !== inProgress) {
+			inProgress = values.inProgress;
+			changed++;
+		}
 
 		//
 		changed && stateStore.set(outShape());
@@ -105,6 +116,8 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		// make sure current step error is reset now
 		steps[current].error = null;
 
+		set({ inProgress: true });
+
 		// prettier-ignore
 		await pre[current].preNext(steps[current].data, { context, wizard, set });
 
@@ -115,14 +128,15 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			steps[current].error = null;
 		} else {
 			// add system custom error if not exist
-			steps[current].error ||=
-				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
+			steps[
+				current
+			].error ||= `Step (${current}): Cannot proceed. Check your step state and/or 'canGoNext' flag.`;
 		}
 
 		// are we done?
 		if (wasLast) await done({ context, steps });
 
-		return set(true);
+		return set({ inProgress: false });
 	};
 
 	//

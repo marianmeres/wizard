@@ -45,7 +45,7 @@ suite.test('basic flow', async () => {
 		step.lets = 'go';
 	})();
 
-	// proceed
+	//
 	x = await w.next();
 	assert(x === 1);
 
