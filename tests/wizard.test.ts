@@ -29,11 +29,10 @@ suite.test('basic flow', async () => {
 			{ label: 'four' },
 		],
 		context: { hey: 'ho' },
+		done: async ({ context, steps }) => 'done...',
 	});
 
 	let x: any;
-
-	assert(!w.isDone());
 
 	w.subscribe(async ({ step, steps }) => {
 		assert(step.foo === 123);
@@ -48,7 +47,6 @@ suite.test('basic flow', async () => {
 
 	// proceed
 	x = await w.next();
-	assert(!w.isDone());
 	assert(x === 1);
 
 	//
@@ -67,7 +65,6 @@ suite.test('basic flow', async () => {
 
 	// must NOT proceed - step 1 has validation
 	x = await w.next();
-	assert(!w.isDone());
 	assert(x === 1);
 
 	w.subscribe(({ step, steps }) => {
@@ -77,7 +74,6 @@ suite.test('basic flow', async () => {
 
 	// now proceed with correct data that validates
 	x = await w.next({ hey: 'ho' });
-	assert(!w.isDone());
 	assert(x === 2);
 
 	w.subscribe(({ step, steps }) => {
@@ -92,7 +88,6 @@ suite.test('basic flow', async () => {
 	})();
 
 	x = await w.next();
-	assert(w.isDone());
 	assert(x === 3);
 
 	w.subscribe(({ step, steps }) => {
@@ -102,7 +97,6 @@ suite.test('basic flow', async () => {
 	})();
 
 	x = await w.next(); // noop
-	assert(w.isDone());
 	assert(x === 3);
 
 	// still on four

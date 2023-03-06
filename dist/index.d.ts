@@ -27,6 +27,10 @@ interface CreateWizardStoreOptions {
         context: any;
         wizard: any;
     }) => Promise<any>;
+    done: ({ context, steps }: {
+        context: any;
+        steps: any;
+    }) => Promise<any>;
 }
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {
     get: Function;
@@ -36,6 +40,5 @@ export declare const createWizardStore: (label: Label, options: CreateWizardStor
     previous: () => Promise<number>;
     reset: () => Promise<number>;
     goto: (index: number, stepsData?: any[]) => Promise<string | number>;
-    isDone: () => boolean;
 };
 export {};

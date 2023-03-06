@@ -32,9 +32,10 @@ const wizard = createWizardStore('foo', {
         { label: 'four' },
     ],
     context: { hey: 'ho' },
+    done: async ({ steps, context }) => '...', // will be called on last .next()
 });
 
-wizard.subscribe(async ({ step, steps, context }) => {
+wizard.subscribe(async ({ step, steps }) => {
     // step props
     const { label, index, data, canGoNext, error, isFirst, isLast } = step;
 
@@ -53,7 +54,6 @@ await wizard.next(/*data*/);
 await wizard.previous();
 await wizard.reset();
 await wizard.goto(index, stepsData);
-wizard.isDone();
 
 ```
 

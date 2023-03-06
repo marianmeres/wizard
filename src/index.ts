@@ -30,15 +30,18 @@ interface CreateWizardStoreOptions {
 	// optional, for various cleanups if necessary, will be called last (after each step's
 	// preReset)
 	preReset?: ({ context, wizard }) => Promise<any>;
+	//
+	done: ({ context, steps }) => Promise<any>;
 }
 
 const isFn = (v) => typeof v === 'function';
 
 export const createWizardStore = (label: Label, options: CreateWizardStoreOptions) => {
-	let { steps, context, preReset } = {
+	let { steps, context, preReset, done } = {
 		steps: [],
 		context: {},
 		preReset: () => null,
+		done: () => null,
 		...(options || {}),
 	};
 
@@ -90,9 +93,6 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
-		// return early if done
-		if (wizard.isDone()) return current;
-
 		steps[current].data = {
 			// always initial (if any)
 			...stepsDataBackup[current],
@@ -116,6 +116,9 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			steps[current].error ||=
 				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
 		}
+
+		// are we done?
+		if (steps[current].isLast) await done({ context, steps });
 
 		return set(true);
 	};
@@ -211,7 +214,6 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		previous,
 		reset,
 		goto,
-		isDone: () => current === maxIndex,
 	};
 
 	return wizard;
