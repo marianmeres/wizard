@@ -29,7 +29,7 @@ suite.test('basic flow', async () => {
 			{ label: 'four' },
 		],
 		context: { hey: 'ho' },
-		done: async ({ context, steps }) => 'done...',
+		onDone: async ({ context, steps }) => 'done...',
 	});
 
 	let x: any;

@@ -27,7 +27,7 @@ interface CreateWizardStoreOptions {
         context: any;
         wizard: any;
     }) => Promise<any>;
-    done: ({ context, steps }: {
+    onDone: ({ context, steps }: {
         context: any;
         steps: any;
     }) => Promise<any>;

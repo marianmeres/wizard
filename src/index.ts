@@ -31,17 +31,17 @@ interface CreateWizardStoreOptions {
 	// preReset)
 	preReset?: ({ context, wizard }) => Promise<any>;
 	//
-	done: ({ context, steps }) => Promise<any>;
+	onDone: ({ context, steps }) => Promise<any>;
 }
 
 const isFn = (v) => typeof v === 'function';
 
 export const createWizardStore = (label: Label, options: CreateWizardStoreOptions) => {
-	let { steps, context, preReset, done } = {
+	let { steps, context, preReset, onDone } = {
 		steps: [],
 		context: {},
 		preReset: () => null,
-		done: () => null,
+		onDone: () => null,
 		...(options || {}),
 	};
 
@@ -132,7 +132,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		}
 
 		// are we done?
-		if (wasLast) await done({ context, steps });
+		if (wasLast) await onDone({ context, steps });
 
 		return set({ inProgress: false });
 	};
