@@ -108,7 +108,9 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		// prettier-ignore
 		await pre[current].preNext(steps[current].data, { context, wizard, set });
 
+		let wasLast = false;
 		if (steps[current].canGoNext) {
+			wasLast = steps[current].isLast;
 			current = Math.min(maxIndex, current + 1);
 			steps[current].error = null;
 		} else {
@@ -118,7 +120,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		}
 
 		// are we done?
-		if (steps[current].isLast) await done({ context, steps });
+		if (wasLast) await done({ context, steps });
 
 		return set(true);
 	};
