@@ -141,11 +141,10 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const previous = async (): Promise<number> => {
 		// always can go back, but it's up to the step to take care of the data
 		// modifications (if needed), such as e.g. reset step data and/or error, etc...
+		set({ inProgress: true });
 		await pre[current].prePrevious(steps[current].data, { context, wizard, set });
-
-		//
 		current = Math.max(0, current - 1);
-		return set(true);
+		return set({ inProgress: false });
 	};
 
 	// returned string should be considered as error message
@@ -174,6 +173,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	//
 	const reset = async (): Promise<number> => {
+		set({ inProgress: true });
 		for (let i = current; i >= 0; i--) {
 			current = i;
 			await pre[current].preReset(steps[current].data, { context, wizard, set });
@@ -184,7 +184,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			steps[idx].error = null;
 			steps[idx].canGoNext = stepsCanGoNextBackup[idx];
 		});
-		set(true);
+		set({ inProgress: false });
 		return current;
 	};
 
