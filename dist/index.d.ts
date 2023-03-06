@@ -4,31 +4,19 @@ interface WizardStepConfig extends Record<string, any> {
     label: Label;
     data?: any;
     canGoNext?: boolean;
-    preNext?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
+    preNext?: (data: any, { context, set, wizard }: {
         context: any;
-        setData: any;
-        setError: any;
-        setContext: any;
-        setCanGoNext: any;
-        touch: any;
+        set: any;
         wizard: any;
     }) => Promise<any>;
-    prePrevious?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
+    prePrevious?: (data: any, { context, set, wizard }: {
         context: any;
-        setData: any;
-        setError: any;
-        setContext: any;
-        setCanGoNext: any;
-        touch: any;
+        set: any;
         wizard: any;
     }) => Promise<any>;
-    preReset?: (data: any, { context, setData, setError, setContext, setCanGoNext, touch, wizard }: {
+    preReset?: (data: any, { context, set, wizard }: {
         context: any;
-        setData: any;
-        setError: any;
-        setContext: any;
-        setCanGoNext: any;
-        touch: any;
+        set: any;
         wizard: any;
     }) => Promise<any>;
 }
@@ -43,6 +31,7 @@ interface CreateWizardStoreOptions {
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {
     get: Function;
     subscribe: (cb: Function) => Function;
+    context: any;
     next: (currentStepData?: any) => Promise<number>;
     previous: () => Promise<number>;
     reset: () => Promise<number>;

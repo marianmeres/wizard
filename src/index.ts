@@ -15,18 +15,9 @@ interface WizardStepConfig extends Record<string, any> {
 	canGoNext?: boolean;
 	// wizard action hooks, will be called just before the action. They still can modify
 	// steps state, which can prevent the action (where aplicable).
-	preNext?: (
-		data,
-		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
-	) => Promise<any>;
-	prePrevious?: (
-		data,
-		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
-	) => Promise<any>;
-	preReset?: (
-		data,
-		{ context, setData, setError, setContext, setCanGoNext, touch, wizard }
-	) => Promise<any>;
+	preNext?: (data, { context, set, wizard }) => Promise<any>;
+	prePrevious?: (data, { context, set, wizard }) => Promise<any>;
+	preReset?: (data, { context, set, wizard }) => Promise<any>;
 }
 
 interface WizardStep extends WizardStepConfig {}
@@ -64,12 +55,16 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	// used for resets
 	let stepsDataBackup = [];
+	let stepsCanGoNextBackup = [];
+
+	// "pre" actions
+	const pre = [];
 
 	//
-	const outShape = () => ({ steps, step: steps[current], context });
+	const outShape = () => ({ steps, step: steps[current] });
 
 	// a.k.a. publish
-	const touch = (values = null) => {
+	const set = (values: { data: any; error: any; canGoNext: boolean } | true = null) => {
 		// return early special case force flag
 		if (values === true) {
 			stateStore.set(outShape());
@@ -77,37 +72,21 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		}
 
 		let { data, error, canGoNext } = values || {};
-		let changed = 0;
-		//
-		if (data !== undefined && steps[current].data !== data) {
-			steps[current].data = data;
-			changed++;
-		}
-		//
-		if (error !== undefined && steps[current].error !== error) {
-			steps[current].error = error;
-			changed++;
-		}
-		//
 		canGoNext = !!canGoNext;
-		if (canGoNext !== undefined && steps[current].canGoNext !== canGoNext) {
-			steps[current].canGoNext = canGoNext;
-			changed++;
-		}
+
 		//
-		if (values?.context !== undefined && values.context !== context) {
-			context = values.context;
-			changed++;
-		}
+		let changed = 0;
+		Object.entries({ data, error, canGoNext }).forEach(([k, v]) => {
+			if (v !== undefined && steps[current][k] !== v) {
+				steps[current][k] = v;
+				changed++;
+			}
+		});
+
 		//
 		changed && stateStore.set(outShape());
 		return current;
 	};
-
-	const setData = (data) => touch({ data });
-	const setError = (error) => touch({ error });
-	const setContext = (context) => touch({ context });
-	const setCanGoNext = (canGoNext: boolean = true) => touch({ canGoNext });
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
@@ -127,10 +106,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		steps[current].error = null;
 
 		// prettier-ignore
-		await steps[current].preNext(
-			steps[current].data,
-			{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
-		);
+		await pre[current].preNext(steps[current].data, { context, wizard, set });
 
 		if (steps[current].canGoNext) {
 			current = Math.min(maxIndex, current + 1);
@@ -141,22 +117,18 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				'Cannot proceed. Check your step state and/or `canGoNext` flag.';
 		}
 
-		return touch(true);
+		return set(true);
 	};
 
 	//
 	const previous = async (): Promise<number> => {
 		// always can go back, but it's up to the step to take care of the data
 		// modifications (if needed), such as e.g. reset step data and/or error, etc...
-		// prettier-ignore
-		await steps[current].prePrevious(
-			steps[current].data,
-			{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
-		);
+		await pre[current].prePrevious(steps[current].data, { context, wizard, set });
 
 		//
 		current = Math.max(0, current - 1);
-		return touch(true);
+		return set(true);
 	};
 
 	// returned string should be considered as error message
@@ -187,42 +159,41 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const reset = async (): Promise<number> => {
 		for (let i = current; i >= 0; i--) {
 			current = i;
-			// prettier-ignore
-			await steps[current].preReset(
-				steps[current].data,
-				{ context, wizard, setData, setError, setContext, setCanGoNext, touch }
-			);
+			await pre[current].preReset(steps[current].data, { context, wizard, set });
 		}
 		await preReset({ context, wizard });
 		stepsDataBackup.forEach((data, idx) => {
 			steps[idx].data = data;
 			steps[idx].error = null;
+			steps[idx].canGoNext = stepsCanGoNextBackup[idx];
 		});
-		touch(true);
+		set(true);
 		return current;
 	};
 
 	// normalize steps shapes
 	steps = steps.map((step, _index) => {
 		const data = step.data || {};
+		const canGoNext = step.canGoNext === undefined ? true : !!step.canGoNext;
+
 		stepsDataBackup[_index] = _deepClone(data);
+		stepsCanGoNextBackup[_index] = canGoNext;
+
+		pre[_index] = {
+			preNext: _normalizeFn(step, 'preNext'),
+			prePrevious: _normalizeFn(step, 'prePrevious'),
+			preReset: _normalizeFn(step, 'preReset'),
+		};
 		return {
 			...step,
 			label: step.label || `${_index + 1}`,
 			index: _index,
 			data,
-			canGoNext: step.canGoNext === undefined ? true : !!step.canGoNext,
+			canGoNext,
 			error: null,
 			isFirst: _index === 0,
 			isLast: _index === maxIndex,
-			preNext: _normalizeFn(step, 'preNext'),
-			prePrevious: _normalizeFn(step, 'prePrevious'),
-			preReset: _normalizeFn(step, 'preReset'),
-			setData,
-			setError,
-			setContext,
-			setCanGoNext,
-			touch,
+			set,
 			next,
 			previous,
 		};
@@ -235,6 +206,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	const wizard = {
 		get: stateStore.get,
 		subscribe: stateStore.subscribe,
+		context,
 		next,
 		previous,
 		reset,

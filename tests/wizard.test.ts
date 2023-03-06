@@ -17,13 +17,12 @@ suite.test('basic flow', async () => {
 			{
 				label: 'two',
 				canGoNext: false,
-				preNext: async (data, { setCanGoNext, context }) => {
-					setCanGoNext(data.hey === context.hey)
+				preNext: async (data, { set, context }) => {
+					set({ canGoNext: data.hey === context.hey });
 				},
 				// we want to reset state on previous click
-				prePrevious: async (data, { setData, setCanGoNext }) => {
-					setCanGoNext(false);
-					setData({});
+				prePrevious: async (data, { set }) => {
+					set({ canGoNext: false, data: {} });
 				},
 			},
 			{ label: 'three' },
@@ -36,15 +35,14 @@ suite.test('basic flow', async () => {
 
 	assert(!w.isDone());
 
-	w.subscribe(async ({ step, steps, context }) => {
+	w.subscribe(async ({ step, steps }) => {
 		assert(step.foo === 123);
 		assert(step.isFirst);
 		assert(!step.isLast);
 
-		// modifying context works, but I tend to consider it as a bad practice...
-		// for writable data the actual step data suits better
-		context.lets = 'go';
-		// this is better
+		// modifying context works, but...
+		w.context.lets = 'go';
+		// for writable state this is better
 		step.lets = 'go';
 	})();
 
@@ -54,7 +52,7 @@ suite.test('basic flow', async () => {
 	assert(x === 1);
 
 	//
-	w.subscribe(({ step, steps, context }) => {
+	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'two');
 		assert(step.foo === undefined);
 		assert(step.error === null);
@@ -62,7 +60,7 @@ suite.test('basic flow', async () => {
 		assert(!step.isLast);
 
 		// modified in previous step
-		assert(context.lets === 'go');
+		assert(w.context.lets === 'go');
 		// but this should be used instead
 		assert(steps[step.index - 1].lets === 'go');
 	})();
@@ -158,7 +156,6 @@ suite.test('basic flow', async () => {
 	w.subscribe(({ step, steps }) => {
 		assert(step.label === 'four');
 	})();
-
 });
 
 export default suite;

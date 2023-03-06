@@ -18,17 +18,13 @@ const wizard = createWizardStore('foo', {
         {
             label: 'two',
             canGoNext: false,
-            preNext: async (
-                data,
-                { context, wizard, setData, setError, setContext, setCanGoNext, touch }
-            ) => {
-                setCanGoNext(data.hey === context.hey)
+            preNext: async (data, { context, wizard, set }) => {
+				set({ canGoNext: data.hey === context.hey })
             },
-            prePrevious: async (data, { /*...*/ }) => {
-                setCanGoNext(false);
-                setData({});
+            prePrevious: async (data, { set }) => {
+				set({ canGoNext: false, data: {} });
             },
-            preReset: async (data, { /*...*/ }) => {
+            preReset: async (data, { context, wizard, set }) => {
                 // ...
             }
         },
@@ -45,17 +41,14 @@ wizard.subscribe(async ({ step, steps, context }) => {
     // do something here...
 
     // step api
-    step.setData(/*data*/);
-    step.setError(/*error*/);
-    step.setContext(/*context*/);
-    step.setCanGoNext(/*bool*/);
-    step.touch(/*{ data, error, context, canGoNext }*/)
+    step.set(/*{ data, error, canGoNext }*/)
 
     await step.next(data);
     await step.previous();
 });
 
 // wizard api
+wizard.context; // reference to context object
 await wizard.next(/*data*/);
 await wizard.previous();
 await wizard.reset();
