@@ -19,10 +19,10 @@ const wizard = createWizardStore('foo', {
             label: 'two',
             canGoNext: false,
             preNext: async (data, { context, wizard, set }) => {
-				set({ canGoNext: data.hey === context.hey })
+                set({ canGoNext: data.hey === context.hey })
             },
             prePrevious: async (data, { set }) => {
-				set({ canGoNext: false, data: {} });
+                set({ canGoNext: false, data: {} });
             },
             preReset: async (data, { context, wizard, set }) => {
                 // ...
