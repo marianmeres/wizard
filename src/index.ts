@@ -194,7 +194,10 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			);
 		}
 		await preReset({ context, wizard });
-		stepsDataBackup.forEach((data, idx) => (steps[idx].data = data));
+		stepsDataBackup.forEach((data, idx) => {
+			steps[idx].data = data;
+			steps[idx].error = null;
+		});
 		touch(true);
 		return current;
 	};
