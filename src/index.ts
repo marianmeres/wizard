@@ -126,13 +126,18 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			wasLast = steps[current].isLast;
 			current = Math.min(maxIndex, current + 1);
 			steps[current].error = null;
+			// are we done?
+			if (wasLast) {
+				try {
+					await onDone({ context, steps });
+				} catch (e) {
+					steps[current].error = e;
+				}
+			}
 		} else {
 			// add system custom error if not exist
 			steps[current].error ||= `Step (${current}): Cannot proceed.`;
 		}
-
-		// are we done?
-		if (wasLast) await onDone({ context, steps });
 
 		return set({ inProgress: false });
 	};
