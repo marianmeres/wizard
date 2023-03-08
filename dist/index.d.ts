@@ -27,9 +27,11 @@ interface CreateWizardStoreOptions {
         context: any;
         wizard: any;
     }) => Promise<any>;
-    onDone: ({ context, steps }: {
+    onDone: ({ context, steps, wizard, set }: {
         context: any;
         steps: any;
+        wizard: any;
+        set: any;
     }) => Promise<any>;
 }
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {

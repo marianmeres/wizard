@@ -31,7 +31,7 @@ interface CreateWizardStoreOptions {
 	// preReset)
 	preReset?: ({ context, wizard }) => Promise<any>;
 	//
-	onDone: ({ context, steps }) => Promise<any>;
+	onDone: ({ context, steps, wizard, set }) => Promise<any>;
 }
 
 const isFn = (v) => typeof v === 'function';
@@ -129,7 +129,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			// are we done?
 			if (wasLast) {
 				try {
-					await onDone({ context, steps });
+					await onDone({ context, steps, wizard, set });
 				} catch (e) {
 					steps[current].error = e;
 				}
