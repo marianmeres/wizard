@@ -14,7 +14,7 @@ interface WizardStepConfig extends Record<string, any> {
 	// step to modify this flag once next business conditions are met.
 	canGoNext?: boolean;
 	// wizard action hooks, will be called just before the action. They still can modify
-	// steps state, which can prevent the action (where aplicable).
+	// steps state, which can prevent the action (where applicable).
 	preNext?: (data, { context, set, wizard }) => Promise<any>;
 	prePrevious?: (data, { context, set, wizard }) => Promise<any>;
 	preReset?: (data, { context, set, wizard }) => Promise<any>;

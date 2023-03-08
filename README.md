@@ -32,7 +32,7 @@ const wizard = createWizardStore('foo', {
         { label: 'four' },
     ],
     context: { hey: 'ho' },
-    onDone: async ({ steps, context }) => '...', // will be called on last .next()
+    onDone: async ({ steps, context, set }) => '...', // will be called on the last .next()
 });
 
 wizard.subscribe(async ({ step, steps }) => {
@@ -49,7 +49,7 @@ wizard.subscribe(async ({ step, steps }) => {
 });
 
 // wizard api
-wizard.context; // reference to context object
+wizard.context; // reference to the context object
 await wizard.next(/*data*/);
 await wizard.previous();
 await wizard.reset();
