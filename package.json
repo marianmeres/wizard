@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/wizard",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Utility for building a wizard like UI.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -34,7 +34,7 @@
   "homepage": "https://github.com/marianmeres/wizard#readme",
   "devDependencies": {
     "@marianmeres/clog": "^0.5.0",
-    "@marianmeres/release": "^0.0.7",
+    "@marianmeres/release": "^0.0.8",
     "@marianmeres/test-runner": "^2.0.13",
     "@rollup/plugin-commonjs": "^24.0.1",
     "@rollup/plugin-node-resolve": "^15.0.1",
