@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/wizard",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Utility for building a wizard like UI.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -13,6 +13,7 @@
   "files": [
     "dist"
   ],
+  "types": "./dist/index.d.ts",
   "scripts": {
     "clean": "rimraf dist/*",
     "prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
