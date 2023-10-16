@@ -35,8 +35,8 @@ interface CreateWizardStoreOptions {
     }) => Promise<any>;
 }
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {
-    get: Function;
-    subscribe: (cb: Function) => Function;
+    get: () => unknown;
+    subscribe: (cb: import("@marianmeres/store").Subscribe<unknown>) => import("@marianmeres/store").Unsubscribe;
     context: any;
     next: (currentStepData?: any) => Promise<number>;
     previous: () => Promise<number>;
