@@ -5,6 +5,10 @@ type stringify = () => string;
 // human readable label (or i18n like shape { locale: label }, or fn )
 type Label = string | Record<string, string> | stringify | object;
 
+type StepValues =
+	| { data?: any; error?: any; canGoNext?: boolean; inProgress?: boolean }
+	| true;
+
 interface WizardStepConfig extends Record<string, any> {
 	label: Label;
 	// arbitrary step data, will be reset to initial state on reset action
@@ -67,16 +71,12 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	let inProgress = false;
 	const outShape = () => ({ steps, step: steps[current], inProgress });
 
-	// a.k.a. publish
-	const set = (
-		values:
-			| { data?: any; error?: any; canGoNext?: boolean; inProgress?: boolean }
-			| true = null
-	) => {
+	// "low level" setter
+	const _set = (idx: number, values: StepValues) => {
 		// return early special case force flag
 		if (values === true) {
 			stateStore.set(outShape());
-			return current;
+			return idx;
 		}
 
 		let { data, error, canGoNext } = values || {};
@@ -85,8 +85,8 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		//
 		let changed = 0;
 		Object.entries({ data, error, canGoNext }).forEach(([k, v]) => {
-			if (v !== undefined && steps[current][k] !== v) {
-				steps[current][k] = v;
+			if (v !== undefined && steps[idx][k] !== v) {
+				steps[idx][k] = v;
 				changed++;
 			}
 		});
@@ -99,8 +99,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 		//
 		changed && stateStore.set(outShape());
-		return current;
+		return idx;
 	};
+
+	// a.k.a. publish
+	const set = (values: StepValues = null) => _set(current, values);
 
 	// idea of `currentStepData` is e.g. form values...
 	const next = async (currentStepData = null): Promise<number> => {
@@ -179,9 +182,14 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	//
 	const reset = async (): Promise<number> => {
 		set({ inProgress: true });
-		for (let i = current; i >= 0; i--) {
-			current = i;
-			await pre[current].preReset(steps[current].data, { context, wizard, set });
+		// reset all
+		for (let i = steps.length - 1; i >= 0; i--) {
+			try {
+				current = i;
+				await pre[i].preReset(steps[i].data, { context, wizard, set });
+			} catch (e) {
+				// special case silence on reset
+			}
 		}
 		await preReset({ context, wizard });
 		stepsDataBackup.forEach((data, idx) => {
@@ -215,9 +223,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			error: null,
 			isFirst: _index === 0,
 			isLast: _index === maxIndex,
-			set,
+			// note: important to note here, that these are evaled in the context of "current"
 			next,
 			previous,
+			// importatnt to "bind" the setter to the step's index, not "current"
+			set: (values: StepValues = null) => _set(_index, values),
 		};
 	});
 

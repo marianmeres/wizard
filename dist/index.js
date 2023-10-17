@@ -1,1 +1,156 @@
-const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},r=(r,s)=>{let{steps:n,context:o,preReset:a,onDone:i}={steps:[],context:{},preReset:()=>null,onDone:()=>null,...s||{}};if(!Array.isArray(n)||n.length<2)throw new TypeError(`${r}: expecting array of at least 2 steps configs.`);const c=(e,t)=>"function"==typeof e[t]?e[t]:()=>!0;let l=0;const u=n.length-1;let p=[],d=[];const f=[];let x=!1;const g=()=>({steps:n,step:n[l],inProgress:x}),b=(e=null)=>{if(!0===e)return y.set(g()),l;let{data:t,error:r,canGoNext:s}=e||{};void 0!==s&&(s=!!s);let o=0;return Object.entries({data:t,error:r,canGoNext:s}).forEach((([e,t])=>{void 0!==t&&n[l][e]!==t&&(n[l][e]=t,o++)})),void 0!==e.inProgress&&e.inProgress!==x&&(x=e.inProgress,o++),o&&y.set(g()),l},w=async(e=null)=>{n[l].data={...p[l],...n[l].data||{},...e||{}},n[l].error=null,b({inProgress:!0}),await f[l].preNext(n[l].data,{context:o,wizard:P,set:b});let t=!1;if(n[l].canGoNext){if(t=n[l].isLast,l=Math.min(u,l+1),n[l].error=null,t)try{await i({context:o,steps:n,wizard:P,set:b})}catch(e){n[l].error=e}}else n[l].error||=`Step (${l}): Cannot proceed.`;return b({inProgress:!1})},h=async()=>(b({inProgress:!0}),await f[l].prePrevious(n[l].data,{context:o,wizard:P,set:b}),l=Math.max(0,l-1),b({inProgress:!1}));n=n.map(((e,t)=>{const r=e.data||{},s=void 0===e.canGoNext||!!e.canGoNext;return p[t]=(e=>JSON.parse(JSON.stringify(e)))(r),d[t]=s,f[t]={preNext:c(e,"preNext"),prePrevious:c(e,"prePrevious"),preReset:c(e,"preReset")},{...e,label:e.label||`${t+1}`,index:t,data:r,canGoNext:s,error:null,isFirst:0===t,isLast:t===u,set:b,next:w,previous:h}}));const y=((r,s=null)=>{const n=t=>e(s?.persist)&&s.persist(t);let o=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return{publish:(e,r={})=>{t(e).forEach((e=>e(r)))},subscribe:r,subscribeOnce:(e,t)=>{const s=r(e,(e=>{t(e),s()}));return s},unsubscribeAll:t=>e.delete(t)}})(),a=r;n(a);const i=()=>a,c=e=>{a!==e&&(a=e,n(a),o.publish("change",a))};return{set:c,get:i,update:e=>{t(e,"[update]"),c(e(i()))},subscribe:e=>(t(e,"[subscribe]"),e(a),o.subscribe("change",e))}})(g()),P={get:y.get,subscribe:y.subscribe,context:o,next:w,previous:h,reset:async()=>{b({inProgress:!0});for(let e=l;e>=0;e--)l=e,await f[l].preReset(n[l].data,{context:o,wizard:P,set:b});return await a({context:o,wizard:P}),p.forEach(((e,t)=>{n[t].data=e,n[t].error=null,n[t].canGoNext=d[t]})),b({inProgress:!1}),l},goto:async(e,t=[])=>{if(e<0||e>u)return`Invalid step index ${e}`;if(e!==l){if(e<l)for(let t=l;t>e;t--)await h();else for(let r=l;r<=e;r++)if(await w(t[r]),n[r].error)return r;return l}}};return P};export{r as createWizardStore};
+const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},n=(r=undefined,n=null)=>{const s=t=>e(n?.persist)&&n.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return {publish:(e,r={})=>{t(e).forEach((e=>e(r)));},subscribe:r,subscribeOnce:(e,t)=>{const n=r(e,(e=>{t(e),n();}));return n},unsubscribeAll:t=>e.delete(t)}})(),c=r;s(c);const o=()=>c,u=e=>{c!==e&&(c=e,s(c),i.publish("change",c));};return {set:u,get:o,update:e=>{t(e,"[update]"),u(e(o()));},subscribe:e=>(t(e,"[subscribe]"),e(c),i.subscribe("change",e))}};
+
+const isFn = (v) => typeof v === 'function';
+const createWizardStore = (label, options) => {
+    let { steps, context, preReset, onDone } = {
+        steps: [],
+        context: {},
+        preReset: () => null,
+        onDone: () => null,
+        ...(options || {}),
+    };
+    if (!Array.isArray(steps) || steps.length < 2) {
+        throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
+    }
+    const _normalizeFn = (step, name) => (isFn(step[name]) ? step[name] : () => true);
+    const _deepClone = (data) => JSON.parse(JSON.stringify(data));
+    let current = 0;
+    const maxIndex = steps.length - 1;
+    let stepsDataBackup = [];
+    let stepsCanGoNextBackup = [];
+    const pre = [];
+    let inProgress = false;
+    const outShape = () => ({ steps, step: steps[current], inProgress });
+    const _set = (idx, values) => {
+        if (values === true) {
+            stateStore.set(outShape());
+            return idx;
+        }
+        let { data, error, canGoNext } = values || {};
+        if (canGoNext !== undefined)
+            canGoNext = !!canGoNext;
+        let changed = 0;
+        Object.entries({ data, error, canGoNext }).forEach(([k, v]) => {
+            if (v !== undefined && steps[idx][k] !== v) {
+                steps[idx][k] = v;
+                changed++;
+            }
+        });
+        if (values.inProgress !== undefined && values.inProgress !== inProgress) {
+            inProgress = values.inProgress;
+            changed++;
+        }
+        changed && stateStore.set(outShape());
+        return idx;
+    };
+    const set = (values = null) => _set(current, values);
+    const next = async (currentStepData = null) => {
+        steps[current].data = {
+            ...stepsDataBackup[current],
+            ...(steps[current].data || {}),
+            ...(currentStepData || {}),
+        };
+        steps[current].error = null;
+        set({ inProgress: true });
+        await pre[current].preNext(steps[current].data, { context, wizard, set });
+        let wasLast = false;
+        if (steps[current].canGoNext) {
+            wasLast = steps[current].isLast;
+            current = Math.min(maxIndex, current + 1);
+            steps[current].error = null;
+            if (wasLast) {
+                try {
+                    await onDone({ context, steps, wizard, set });
+                }
+                catch (e) {
+                    steps[current].error = e;
+                }
+            }
+        }
+        else {
+            steps[current].error ||= `Step (${current}): Cannot proceed.`;
+        }
+        return set({ inProgress: false });
+    };
+    const previous = async () => {
+        set({ inProgress: true });
+        await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+        current = Math.max(0, current - 1);
+        return set({ inProgress: false });
+    };
+    const goto = async (index, stepsData = []) => {
+        if (index < 0 || index > maxIndex)
+            return `Invalid step index ${index}`;
+        if (index === current)
+            return;
+        if (index < current) {
+            for (let i = current; i > index; i--) {
+                await previous();
+            }
+        }
+        else {
+            for (let i = current; i <= index; i++) {
+                await next(stepsData[i]);
+                if (steps[i].error)
+                    return i;
+            }
+        }
+        return current;
+    };
+    const reset = async () => {
+        set({ inProgress: true });
+        for (let i = steps.length - 1; i >= 0; i--) {
+            try {
+                current = i;
+                await pre[i].preReset(steps[i].data, { context, wizard, set });
+            }
+            catch (e) {
+            }
+        }
+        await preReset({ context, wizard });
+        stepsDataBackup.forEach((data, idx) => {
+            steps[idx].data = data;
+            steps[idx].error = null;
+            steps[idx].canGoNext = stepsCanGoNextBackup[idx];
+        });
+        set({ inProgress: false });
+        return current;
+    };
+    steps = steps.map((step, _index) => {
+        const data = step.data || {};
+        const canGoNext = step.canGoNext === undefined ? true : !!step.canGoNext;
+        stepsDataBackup[_index] = _deepClone(data);
+        stepsCanGoNextBackup[_index] = canGoNext;
+        pre[_index] = {
+            preNext: _normalizeFn(step, 'preNext'),
+            prePrevious: _normalizeFn(step, 'prePrevious'),
+            preReset: _normalizeFn(step, 'preReset'),
+        };
+        return {
+            ...step,
+            label: step.label || `${_index + 1}`,
+            index: _index,
+            data,
+            canGoNext,
+            error: null,
+            isFirst: _index === 0,
+            isLast: _index === maxIndex,
+            next,
+            previous,
+            set: (values = null) => _set(_index, values),
+        };
+    });
+    const stateStore = n(outShape());
+    const wizard = {
+        get: stateStore.get,
+        subscribe: stateStore.subscribe,
+        context,
+        next,
+        previous,
+        reset,
+        goto,
+    };
+    return wizard;
+};
+
+export { createWizardStore };
