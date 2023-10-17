@@ -18,6 +18,7 @@
 		"clean": "rimraf dist/*",
 		"prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
 		"release": "release -v minor",
+		"release:patch": "release -v patch",
 		"test": "node --loader ts-node/esm tests/index.ts",
 		"test:watch": "nodemon --delay 0.5 -q -w \"src/**/*.*\" -w \"tests/**/*.*\" -x \"node --loader ts-node/esm tests/index.ts\" --",
 		"build": "npm run clean && rollup -c",

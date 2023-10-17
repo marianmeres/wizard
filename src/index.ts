@@ -24,10 +24,18 @@ interface WizardStepConfig extends Record<string, any> {
 	preReset?: (data, { context, set, wizard }) => Promise<any>;
 }
 
-interface WizardStep extends WizardStepConfig {}
+interface WizardStep extends WizardStepConfig {
+	index: number;
+	error: Error | null;
+	isFirst: boolean;
+	isLast: boolean;
+	next: (currentStepData: any) => Promise<any>;
+	previous: CallableFunction;
+	set: (values: StepValues) => void;
+}
 
 interface CreateWizardStoreOptions {
-	steps: WizardStep[];
+	steps: WizardStepConfig[];
 	// arbitrary global object accessible to all steps, can be modified, but will not be
 	// reset on reset or previous actions (so should be considered more as readonly)
 	context?: any;
@@ -36,6 +44,12 @@ interface CreateWizardStoreOptions {
 	preReset?: ({ context, wizard }) => Promise<any>;
 	//
 	onDone: ({ context, steps, wizard, set }) => Promise<any>;
+}
+
+interface WizardStoreVal {
+	step: WizardStep;
+	steps: WizardStep[];
+	inProgress: boolean;
 }
 
 const isFn = (v) => typeof v === 'function';
@@ -79,7 +93,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	//
 	let inProgress = false;
-	const outShape = () => ({ steps, step: steps[current], inProgress });
+	const outShape = () => ({ steps, step: steps[current], inProgress } as WizardStoreVal);
 
 	// "low level" setter
 	const _set = (idx: number, values: StepValues) => {
@@ -255,7 +269,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	});
 
 	//
-	const stateStore = createStore(outShape());
+	const stateStore = createStore<{
+		step: WizardStep;
+		steps: WizardStep[];
+		inProgress: boolean;
+	}>(outShape());
 
 	//
 	const wizard = {
