@@ -23,7 +23,7 @@ interface WizardStepConfig extends Record<string, any> {
 interface WizardStep extends WizardStepConfig {}
 
 interface CreateWizardStoreOptions {
-	steps: WizardStepConfig[];
+	steps: WizardStep[];
 	// arbitrary global object accessible to all steps, can be modified, but will not be
 	// reset on reset or previous actions (so should be considered more as readonly)
 	context?: any;
