@@ -39,6 +39,7 @@ interface CreateWizardStoreOptions {
 }
 
 const isFn = (v) => typeof v === 'function';
+const deepClone = (data) => JSON.parse(JSON.stringify(data)); // poor man's deep clone
 
 export const createWizardStore = (label: Label, options: CreateWizardStoreOptions) => {
 	let { steps, context, preReset, onDone } = {
@@ -53,8 +54,17 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
 	}
 
-	const _normalizeFn = (step, name): any => (isFn(step[name]) ? step[name] : () => true);
-	const _deepClone = (data) => JSON.parse(JSON.stringify(data)); // poor man's deep clone
+	//
+	let _inPre = false;
+	const _normalizePreFn = (step, name): any => {
+		const fn = isFn(step[name]) ? step[name] : () => true;
+		return async (data, { context, set, wizard }) => {
+			_inPre = true;
+			const result = await fn(data, { context, set, wizard });
+			_inPre = false;
+			return result;
+		};
+	};
 
 	// current step index
 	let current = 0;
@@ -139,7 +149,10 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			}
 		} else {
 			// add system custom error if not exist
-			steps[current].error ||= `Step (${current}): Cannot proceed.`;
+			steps[current].error ||= [
+				`Step (${current}): Cannot proceed.`,
+				`(Hint: check if the 'canGoNext' step prop is re/set correctly)`,
+			].join(' ');
 		}
 
 		return set({ inProgress: false });
@@ -181,9 +194,16 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	//
 	const reset = async (): Promise<number> => {
+		// sanity check to avoid accidental logical flow errors
+		if (_inPre) {
+			throw new TypeError(`Cannot reset wizard state from inside of "pre" handlers.`);
+		}
+
 		set({ inProgress: true });
-		// reset all
-		for (let i = steps.length - 1; i >= 0; i--) {
+
+		// reset all (even if current is not at the end)
+		// for (let i = steps.length - 1; i >= 0; i--) {
+		for (let i = current; i >= 0; i--) {
 			try {
 				current = i;
 				await pre[i].preReset(steps[i].data, { context, wizard, set });
@@ -191,12 +211,15 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				// special case silence on reset
 			}
 		}
+
 		await preReset({ context, wizard });
+
 		stepsDataBackup.forEach((data, idx) => {
 			steps[idx].data = data;
 			steps[idx].error = null;
 			steps[idx].canGoNext = stepsCanGoNextBackup[idx];
 		});
+
 		set({ inProgress: false });
 		return current;
 	};
@@ -206,13 +229,13 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		const data = step.data || {};
 		const canGoNext = step.canGoNext === undefined ? true : !!step.canGoNext;
 
-		stepsDataBackup[_index] = _deepClone(data);
+		stepsDataBackup[_index] = deepClone(data);
 		stepsCanGoNextBackup[_index] = canGoNext;
 
 		pre[_index] = {
-			preNext: _normalizeFn(step, 'preNext'),
-			prePrevious: _normalizeFn(step, 'prePrevious'),
-			preReset: _normalizeFn(step, 'preReset'),
+			preNext: _normalizePreFn(step, 'preNext'),
+			prePrevious: _normalizePreFn(step, 'prePrevious'),
+			preReset: _normalizePreFn(step, 'preReset'),
 		};
 		return {
 			...step,

@@ -1,6 +1,7 @@
 const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},n=(r=undefined,n=null)=>{const s=t=>e(n?.persist)&&n.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return {publish:(e,r={})=>{t(e).forEach((e=>e(r)));},subscribe:r,subscribeOnce:(e,t)=>{const n=r(e,(e=>{t(e),n();}));return n},unsubscribeAll:t=>e.delete(t)}})(),c=r;s(c);const o=()=>c,u=e=>{c!==e&&(c=e,s(c),i.publish("change",c));};return {set:u,get:o,update:e=>{t(e,"[update]"),u(e(o()));},subscribe:e=>(t(e,"[subscribe]"),e(c),i.subscribe("change",e))}};
 
 const isFn = (v) => typeof v === 'function';
+const deepClone = (data) => JSON.parse(JSON.stringify(data));
 const createWizardStore = (label, options) => {
     let { steps, context, preReset, onDone } = {
         steps: [],
@@ -12,8 +13,16 @@ const createWizardStore = (label, options) => {
     if (!Array.isArray(steps) || steps.length < 2) {
         throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
     }
-    const _normalizeFn = (step, name) => (isFn(step[name]) ? step[name] : () => true);
-    const _deepClone = (data) => JSON.parse(JSON.stringify(data));
+    let _inPre = false;
+    const _normalizePreFn = (step, name) => {
+        const fn = isFn(step[name]) ? step[name] : () => true;
+        return async (data, { context, set, wizard }) => {
+            _inPre = true;
+            const result = await fn(data, { context, set, wizard });
+            _inPre = false;
+            return result;
+        };
+    };
     let current = 0;
     const maxIndex = steps.length - 1;
     let stepsDataBackup = [];
@@ -68,7 +77,10 @@ const createWizardStore = (label, options) => {
             }
         }
         else {
-            steps[current].error ||= `Step (${current}): Cannot proceed.`;
+            steps[current].error ||= [
+                `Step (${current}): Cannot proceed.`,
+                `(Hint: check if the 'canGoNext' step prop is re/set correctly)`,
+            ].join(' ');
         }
         return set({ inProgress: false });
     };
@@ -98,8 +110,11 @@ const createWizardStore = (label, options) => {
         return current;
     };
     const reset = async () => {
+        if (_inPre) {
+            throw new TypeError(`Cannot reset wizard state from inside of "pre" handlers.`);
+        }
         set({ inProgress: true });
-        for (let i = steps.length - 1; i >= 0; i--) {
+        for (let i = current; i >= 0; i--) {
             try {
                 current = i;
                 await pre[i].preReset(steps[i].data, { context, wizard, set });
@@ -119,12 +134,12 @@ const createWizardStore = (label, options) => {
     steps = steps.map((step, _index) => {
         const data = step.data || {};
         const canGoNext = step.canGoNext === undefined ? true : !!step.canGoNext;
-        stepsDataBackup[_index] = _deepClone(data);
+        stepsDataBackup[_index] = deepClone(data);
         stepsCanGoNextBackup[_index] = canGoNext;
         pre[_index] = {
-            preNext: _normalizeFn(step, 'preNext'),
-            prePrevious: _normalizeFn(step, 'prePrevious'),
-            preReset: _normalizeFn(step, 'preReset'),
+            preNext: _normalizePreFn(step, 'preNext'),
+            prePrevious: _normalizePreFn(step, 'prePrevious'),
+            preReset: _normalizePreFn(step, 'preReset'),
         };
         return {
             ...step,
