@@ -20,8 +20,10 @@ interface WizardStepConfig extends Record<string, any> {
         wizard: any;
     }) => Promise<any>;
 }
+interface WizardStep extends WizardStepConfig {
+}
 interface CreateWizardStoreOptions {
-    steps: WizardStepConfig[];
+    steps: WizardStep[];
     context?: any;
     preReset?: ({ context, wizard }: {
         context: any;
