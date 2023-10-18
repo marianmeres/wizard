@@ -164,6 +164,7 @@ const createWizardStore = (label, options) => {
         previous,
         reset,
         goto,
+        label,
     };
     return wizard;
 };

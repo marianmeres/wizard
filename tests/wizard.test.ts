@@ -34,6 +34,8 @@ suite.test('basic flow', async () => {
 
 	let x: any;
 
+	assert(w.label === 'foo');
+
 	w.subscribe(async ({ step, steps }) => {
 		assert(step.foo === 123);
 		assert(step.isFirst);

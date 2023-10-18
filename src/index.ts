@@ -284,6 +284,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		previous,
 		reset,
 		goto,
+		label,
 	};
 
 	return wizard;
