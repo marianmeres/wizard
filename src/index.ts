@@ -74,9 +74,13 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		const fn = isFn(step[name]) ? step[name] : () => true;
 		return async (data, { context, set, wizard }) => {
 			_inPre = true;
-			const result = await fn(data, { context, set, wizard });
-			_inPre = false;
-			return result;
+			try {
+				await fn(data, { context, set, wizard });
+			} catch (error) {
+				throw error;
+			} finally {
+				_inPre = false;
+			}
 		};
 	};
 
@@ -145,11 +149,16 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 		set({ inProgress: true });
 
-		// prettier-ignore
-		await pre[current].preNext(steps[current].data, { context, wizard, set });
+		// special case convention - normalized "preFn" may return error (but error can be set
+		// internally as well via `set` method)
+		try {
+			await pre[current].preNext(steps[current].data, { context, wizard, set });
+		} catch (e) {
+			steps[current].error = e;
+		}
 
 		let wasLast = false;
-		if (steps[current].canGoNext) {
+		if (!steps[current].error && steps[current].canGoNext) {
 			wasLast = steps[current].isLast;
 			current = Math.min(maxIndex, current + 1);
 			steps[current].error = null;
@@ -177,7 +186,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		// always can go back, but it's up to the step to take care of the data
 		// modifications (if needed), such as e.g. reset step data and/or error, etc...
 		set({ inProgress: true });
-		await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+		try {
+			await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+		} catch (e) {
+			steps[current].error = e;
+		}
 		current = Math.max(0, current - 1);
 		return set({ inProgress: false });
 	};
@@ -226,7 +239,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			}
 		}
 
-		await preReset({ context, wizard });
+		try {
+			await preReset({ context, wizard });
+		} catch (e) {
+			// special case silence on reset
+		}
 
 		stepsDataBackup.forEach((data, idx) => {
 			steps[idx].data = data;

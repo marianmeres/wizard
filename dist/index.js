@@ -18,9 +18,15 @@ const createWizardStore = (label, options) => {
         const fn = isFn(step[name]) ? step[name] : () => true;
         return async (data, { context, set, wizard }) => {
             _inPre = true;
-            const result = await fn(data, { context, set, wizard });
-            _inPre = false;
-            return result;
+            try {
+                await fn(data, { context, set, wizard });
+            }
+            catch (error) {
+                throw error;
+            }
+            finally {
+                _inPre = false;
+            }
         };
     };
     let current = 0;
@@ -61,9 +67,14 @@ const createWizardStore = (label, options) => {
         };
         steps[current].error = null;
         set({ inProgress: true });
-        await pre[current].preNext(steps[current].data, { context, wizard, set });
+        try {
+            await pre[current].preNext(steps[current].data, { context, wizard, set });
+        }
+        catch (e) {
+            steps[current].error = e;
+        }
         let wasLast = false;
-        if (steps[current].canGoNext) {
+        if (!steps[current].error && steps[current].canGoNext) {
             wasLast = steps[current].isLast;
             current = Math.min(maxIndex, current + 1);
             steps[current].error = null;
@@ -86,7 +97,12 @@ const createWizardStore = (label, options) => {
     };
     const previous = async () => {
         set({ inProgress: true });
-        await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+        try {
+            await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+        }
+        catch (e) {
+            steps[current].error = e;
+        }
         current = Math.max(0, current - 1);
         return set({ inProgress: false });
     };
@@ -122,7 +138,11 @@ const createWizardStore = (label, options) => {
             catch (e) {
             }
         }
-        await preReset({ context, wizard });
+        try {
+            await preReset({ context, wizard });
+        }
+        catch (e) {
+        }
         stepsDataBackup.forEach((data, idx) => {
             steps[idx].data = data;
             steps[idx].error = null;

@@ -154,4 +154,34 @@ suite.test('basic flow', async () => {
 	})();
 });
 
+suite.test('preNext error', async () => {
+	const w = createWizardStore('foo', {
+		steps: [
+			{
+				label: 'one',
+				foo: 123,
+				preNext: async (data, { set, context }) => {
+					throw new Error('Boo');
+				},
+			},
+			{ label: 'two' },
+		],
+		context: { hey: 'ho' },
+		onDone: async ({ context, steps }) => 'done...',
+	});
+
+	w.subscribe(({ step, steps }) => {
+		assert(!step.error);
+		assert(step.canGoNext);
+	})();
+
+	await w.next();
+
+	w.subscribe(({ step, steps }) => {
+		assert(step.error);
+		// potential confusion: canGoNext will be true even if error exists
+		assert(step.canGoNext);
+	})();
+});
+
 export default suite;
