@@ -149,8 +149,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 		set({ inProgress: true });
 
-		// special case convention - normalized "preFn" may return error (but error can be set
-		// internally as well via `set` method)
+		//
 		try {
 			await pre[current].preNext(steps[current].data, { context, wizard, set });
 		} catch (e) {
