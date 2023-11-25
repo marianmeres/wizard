@@ -44,6 +44,8 @@ interface CreateWizardStoreOptions {
 	preReset?: ({ context, wizard }) => Promise<any>;
 	//
 	onDone: ({ context, steps, wizard, set }) => Promise<any>;
+	//
+	logger?: (...args: any[]) => undefined;
 }
 
 interface WizardStoreVal {
@@ -68,7 +70,13 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
 	}
 
-	//
+	const log = (...args) => {
+		if (typeof options.logger === 'function') {
+			options.logger.apply(options.logger, args);
+		}
+	};
+
+	// wrap "pre" handlers, co we can track actions called from inside those handlers
 	let _inPre = false;
 	const _normalizePreFn = (step, name): any => {
 		const fn = isFn(step[name]) ? step[name] : () => true;
@@ -84,9 +92,21 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		};
 	};
 
-	// current step index
+	// current step index... (should not be changed directly, but via de/increment fns below)
 	let current = 0;
 	const maxIndex = steps.length - 1;
+
+	// a.k.a. go next (note that pointer change by itself does not "publish" the change)
+	const incrementPointer = () => {
+		current = Math.min(maxIndex, current + 1);
+		log(`  ... incremented pointer to ${current}`);
+	};
+
+	// a.k.a. go previous (note that pointer change by itself does not "publish" the change)
+	const decrementPointer = () => {
+		current = Math.max(0, current - 1);
+		log(`  ... decremented pointer to ${current}`);
+	};
 
 	// used for resets
 	let stepsDataBackup = [];
@@ -101,7 +121,9 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 
 	// "low level" setter
 	const _set = (idx: number, values: StepValues) => {
-		// return early special case force flag
+		log(`  _set(${idx})`, values);
+
+		// explicit true is understood as "publish current" flag
 		if (values === true) {
 			stateStore.set(outShape());
 			return idx;
@@ -130,111 +152,172 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		return idx;
 	};
 
-	// a.k.a. publish
-	const set = (values: StepValues = null) => _set(current, values);
+	// a.k.a. publish/update store
+	const set = (values: StepValues = null): number => {
+		log('set() ...');
+		return _set(current, values);
+	};
 
 	// idea of `currentStepData` is e.g. form values...
-	const next = async (currentStepData = null): Promise<number> => {
-		steps[current].data = {
+	const next = async (currentStepData: any = null): Promise<number> => {
+		log(`next() ...`, { current });
+		const _current = current; // freeze
+
+		//
+		steps[_current].data = {
 			// always initial (if any)
-			...stepsDataBackup[current],
+			...stepsDataBackup[_current],
 			// with whatever previous modifications (if any)
-			...(steps[current].data || {}),
+			...(steps[_current].data || {}),
 			// with current parameter (if any)
 			...(currentStepData || {}),
 		};
 
 		// make sure current step error is reset now
-		steps[current].error = null;
+		steps[_current].error = null;
 
-		set({ inProgress: true });
+		_set(_current, { inProgress: true });
 
 		//
 		try {
-			await pre[current].preNext(steps[current].data, { context, wizard, set });
+			await pre[_current].preNext(steps[_current].data, { context, wizard, set });
 		} catch (e) {
-			steps[current].error = e;
+			steps[_current].error = e;
+			log(`  error in next:preNext(${_current})`, e.toString());
 		}
 
-		let wasLast = false;
-		if (!steps[current].error && steps[current].canGoNext) {
-			wasLast = steps[current].isLast;
-			current = Math.min(maxIndex, current + 1);
-			steps[current].error = null;
-			// are we done?
-			if (wasLast) {
-				try {
-					await onDone({ context, steps, wizard, set });
-				} catch (e) {
-					steps[current].error = e;
-				}
-			}
-		} else {
+		if (!steps[_current].canGoNext) {
 			// add system custom error if not exist
-			steps[current].error ||= [
-				`Step (${current}): Cannot proceed.`,
+			steps[_current].error ||= [
+				`Step (${_current}): Cannot proceed.`,
 				`(Hint: check if the 'canGoNext' step prop is re/set correctly)`,
 			].join(' ');
 		}
 
-		return set({ inProgress: false });
+		//
+		if (!steps[_current].error && steps[_current].isLast) {
+			try {
+				await onDone({ context, steps, wizard, set });
+			} catch (e) {
+				steps[_current].error = e;
+				log(`  error in next:onDone()`, { current: _current }, e.toString());
+			}
+		}
+
+		// done next-ing...
+		_set(_current, { inProgress: false });
+
+		// finally, if no error, move pointer to the next step
+		if (!steps[_current].error) {
+			incrementPointer();
+			// if there was historically an error in the next step, make sure to reset it now
+			steps[current].error = null;
+		}
+
+		// "publish" the change
+		return set(true);
 	};
 
 	//
 	const previous = async (): Promise<number> => {
+		log('previous() ...', { current });
+		const _current = current;
 		// always can go back, but it's up to the step to take care of the data
 		// modifications (if needed), such as e.g. reset step data and/or error, etc...
-		set({ inProgress: true });
+		_set(_current, { inProgress: true });
 		try {
-			await pre[current].prePrevious(steps[current].data, { context, wizard, set });
+			await pre[_current].prePrevious(steps[_current].data, { context, wizard, set });
 		} catch (e) {
-			steps[current].error = e;
+			steps[_current].error = e;
+			log(`  error in previous()`, { current: _current }, e.toString());
 		}
-		current = Math.max(0, current - 1);
-		return set({ inProgress: false });
+
+		// done previous-ing...
+		_set(_current, { inProgress: false });
+
+		// do not care for error here, move pointer downwards anyway
+		decrementPointer();
+
+		// "publish" the change
+		return set(true);
 	};
 
-	// returned string should be considered as error message
-	const goto = async (index: number, stepsData = []): Promise<string | number> => {
-		if (index < 0 || index > maxIndex) return `Invalid step index ${index}`;
+	//
+	const goto = async (
+		targetIndex: number,
+		stepsData = [],
+		assert = true
+	): Promise<number> => {
+		log(`goto(${targetIndex}) ...`, { current });
+
+		if (targetIndex < 0 || targetIndex > maxIndex) {
+			throw new RangeError(`Invalid step index ${targetIndex}`);
+		}
 
 		// going nowhere?
-		if (index === current) return;
+		if (targetIndex === current) return;
+
+		let _movedToIdx;
+		let _lastErrIdx;
 
 		// going back...
-		if (index < current) {
-			for (let i = current; i > index; i--) {
-				await previous();
+		if (targetIndex < current) {
+			for (let i = current; i > targetIndex; i--) {
+				_movedToIdx = await previous();
+				if (steps[i].error) {
+					log(`  error detected in goto back loop (index ${i})`, steps[i].error);
+					_lastErrIdx = i;
+					break;
+				}
 			}
 		}
 		// going forward...
 		else {
-			for (let i = current; i <= index; i++) {
-				await next(stepsData[i]);
-				if (steps[i].error) return i;
+			for (let i = current; i < targetIndex; i++) {
+				_movedToIdx = await next(stepsData[i]);
+				if (steps[i].error) {
+					log(`  error detected in goto forward loop (index ${i})`, steps[i].error);
+					_lastErrIdx = i;
+					break;
+				}
 			}
 		}
 
-		return current;
+		// did not make it successfully...
+		if (assert && _lastErrIdx !== undefined) {
+			// prettier-ignore
+			throw new Error([
+				`The 'goto(${targetIndex}, ...)' command did not succeed.`,
+				// do not edit, as this is easily parsable (yet ugly and hackish) if truly needed
+				// /step\[(\d+)\]/
+				`Check step[${_lastErrIdx}]'s error.`,
+			].join(' '));
+		}
+
+		return _movedToIdx;
 	};
 
 	//
 	const reset = async (): Promise<number> => {
+		log('reset() ...', { current });
+
 		// sanity check to avoid accidental logical flow errors
 		if (_inPre) {
 			throw new TypeError(`Cannot reset wizard state from inside of "pre" handlers.`);
 		}
-
-		set({ inProgress: true });
 
 		// reset all (even if current is not at the end)
 		// for (let i = steps.length - 1; i >= 0; i--) {
 		for (let i = current; i >= 0; i--) {
 			try {
 				current = i;
+				_set(i, { inProgress: true });
 				await pre[i].preReset(steps[i].data, { context, wizard, set });
 			} catch (e) {
 				// special case silence on reset
+				log(`  swallowed error inside reset loop (preReset(${i}))`, e.toString());
+			} finally {
+				_set(i, { inProgress: false });
 			}
 		}
 
@@ -242,6 +325,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			await preReset({ context, wizard });
 		} catch (e) {
 			// special case silence on reset
+			log(`  swallowed error inside global preReset()`, e.toString());
 		}
 
 		stepsDataBackup.forEach((data, idx) => {
@@ -250,8 +334,21 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 			steps[idx].canGoNext = stepsCanGoNextBackup[idx];
 		});
 
-		set({ inProgress: false });
-		return current;
+		// "publish" the change
+		return set(true);
+	};
+
+	// "softer" version of reset - will not touch steps data (call pre handlers),
+	// just reset the `canGoNext` flags to their initial values...
+	const resetCanGoNext = () => {
+		steps = steps.map((step, i) => ({ ...step, canGoNext: stepsCanGoNextBackup[i] }));
+		return set(true);
+	};
+
+	// it might be desired to just allow jumping up/down without any state business...
+	const allowCanGoNext = () => {
+		steps = steps.map((step, i) => ({ ...step, canGoNext: true }));
+		return set(true);
 	};
 
 	// normalize steps shapes
@@ -269,18 +366,21 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		};
 		return {
 			...step,
-			label: step.label || `${_index + 1}`,
+			label: step.label || `${_index + 1}`, // defaults to "1" based human readable index
 			index: _index,
 			data,
 			canGoNext,
 			error: null,
 			isFirst: _index === 0,
 			isLast: _index === maxIndex,
-			// note: important to note here, that these are evaled in the context of "current"
+			// note: important to note here, that these are evaluated in the context of "current"
 			next,
 			previous,
 			// importatnt to "bind" the setter to the step's index, not "current"
-			set: (values: StepValues = null) => _set(_index, values),
+			set: (values: StepValues = null) => {
+				log('step.set() ...');
+				_set(_index, values);
+			},
 		};
 	});
 
@@ -301,6 +401,8 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		reset,
 		goto,
 		label,
+		allowCanGoNext,
+		resetCanGoNext,
 	};
 
 	return wizard;

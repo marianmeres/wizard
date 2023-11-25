@@ -48,6 +48,7 @@ interface CreateWizardStoreOptions {
         wizard: any;
         set: any;
     }) => Promise<any>;
+    logger?: (...args: any[]) => undefined;
 }
 export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {
     get: () => {
@@ -64,7 +65,9 @@ export declare const createWizardStore: (label: Label, options: CreateWizardStor
     next: (currentStepData?: any) => Promise<number>;
     previous: () => Promise<number>;
     reset: () => Promise<number>;
-    goto: (index: number, stepsData?: any[]) => Promise<string | number>;
+    goto: (targetIndex: number, stepsData?: any[], assert?: boolean) => Promise<number>;
     label: Label;
+    allowCanGoNext: () => number;
+    resetCanGoNext: () => number;
 };
 export {};

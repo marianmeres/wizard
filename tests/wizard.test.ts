@@ -30,6 +30,7 @@ suite.test('basic flow', async () => {
 		],
 		context: { hey: 'ho' },
 		onDone: async ({ context, steps }) => 'done...',
+		// logger: createClog('wizard').debug as any,
 	});
 
 	let x: any;
@@ -129,8 +130,8 @@ suite.test('basic flow', async () => {
 		assert(step.label === 'one');
 	})();
 
-	// must not work
-	x = await w.goto(3);
+	// must not work (with assert = false)
+	x = await w.goto(3, [], false);
 	assert(x === 1);
 
 	w.subscribe(({ step, steps }) => {
@@ -146,7 +147,7 @@ suite.test('basic flow', async () => {
 	})();
 
 	// now MUST work (since we're providing correct step data which will validate)
-	x = await w.goto(3, [null, { hey: 'ho' }]);
+	x = await w.goto(3, [null, { hey: 'ho' }] as any);
 	assert(x === 3);
 
 	w.subscribe(({ step, steps }) => {
@@ -182,6 +183,54 @@ suite.test('preNext error', async () => {
 		// potential confusion: canGoNext will be true even if error exists
 		assert(step.canGoNext);
 	})();
+});
+
+suite.test('goto works', async () => {
+	const w = createWizardStore('foo', {
+		steps: [
+			{ label: 'one' },
+			{ label: 'two', canGoNext: false },
+			{ label: 'three' },
+			{ label: 'four' },
+			{ label: 'five' },
+			{ label: 'six' },
+		],
+		context: { hey: 'ho' },
+		onDone: async ({ context, steps }) => 'done...',
+		// logger: createClog('wizard').debug as any,
+	});
+
+	w.subscribe(({ step, steps }) => {
+		assert(step.label === 'one');
+	})();
+
+	// must not allow to goto beyond 2
+	await assert.rejects(w.goto(3));
+
+	w.subscribe(({ step, steps }) => {
+		// clog(step);
+		assert(step.label === 'two');
+	})();
+
+	// now mark every step as "canGoNext"
+	w.allowCanGoNext();
+	// w.subscribe(({ step, steps }) => {
+	// steps.forEach((s) => s.set({ canGoNext: true }));
+	// })();
+
+	await w.goto(4);
+
+	w.subscribe(({ step, steps }) => {
+		// clog(step);
+		assert(step.label === 'five');
+	})();
+
+	// go back to start, and revert flags to initial values
+	await w.goto(0);
+	w.resetCanGoNext();
+
+	// now must not work again
+	await assert.rejects(w.goto(3));
 });
 
 export default suite;
