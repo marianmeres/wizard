@@ -1,6 +1,6 @@
 {
 	"name": "@marianmeres/wizard",
-	"version": "1.5.0",
+	"version": "1.6.0",
 	"description": "Utility for building a wizard like UI.",
 	"type": "module",
 	"main": "./dist/index.cjs",
