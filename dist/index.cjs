@@ -16,7 +16,7 @@ const createWizardStore = (label, options) => {
         throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
     }
     const log = (...args) => {
-        if (typeof options.logger === 'function') {
+        if (isFn(options.logger)) {
             options.logger.apply(options.logger, args);
         }
     };
@@ -62,7 +62,9 @@ const createWizardStore = (label, options) => {
             canGoNext = !!canGoNext;
         let changed = 0;
         Object.entries({ data, error, canGoNext }).forEach(([k, v]) => {
-            if (v !== undefined && steps[idx][k] !== v) {
+            if (v !== undefined && (steps[idx][k] !== v || isFn(v))) {
+                if (isFn(v))
+                    v = v(steps[idx][k]);
                 steps[idx][k] = v;
                 changed++;
             }

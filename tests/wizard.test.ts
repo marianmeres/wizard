@@ -233,4 +233,24 @@ suite.test('goto works', async () => {
 	await assert.rejects(w.goto(3));
 });
 
+suite.test('set fn val', async () => {
+	const w = createWizardStore('foo', {
+		steps: [{ label: 'one', data: { val: 1 } }, { label: 'two' }],
+		onDone: async ({ context, steps }) => 'done...',
+		// logger: createClog('wizard').debug as any,
+	});
+
+	w.subscribe(({ step, steps }) => {
+		// clog(step);
+		assert(step.data.val === 1);
+		step.set({
+			data: (old) => {
+				old.val++;
+				return { ...old };
+			},
+		});
+		assert(step.data.val === 2);
+	})();
+});
+
 export default suite;

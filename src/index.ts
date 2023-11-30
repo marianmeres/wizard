@@ -71,7 +71,7 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	}
 
 	const log = (...args) => {
-		if (typeof options.logger === 'function') {
+		if (isFn(options.logger)) {
 			options.logger.apply(options.logger, args);
 		}
 	};
@@ -135,7 +135,11 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 		//
 		let changed = 0;
 		Object.entries({ data, error, canGoNext }).forEach(([k, v]) => {
-			if (v !== undefined && steps[idx][k] !== v) {
+			if (v !== undefined && (steps[idx][k] !== v || isFn(v))) {
+				// support for fn value... handy for updates, e.g.:
+				// set({ data: (old) => ({ ...old, foo: 'bar' }) })
+				if (isFn(v)) v = v(steps[idx][k]);
+				//
 				steps[idx][k] = v;
 				changed++;
 			}
