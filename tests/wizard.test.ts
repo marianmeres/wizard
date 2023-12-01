@@ -235,21 +235,37 @@ suite.test('goto works', async () => {
 
 suite.test('set fn val', async () => {
 	const w = createWizardStore('foo', {
-		steps: [{ label: 'one', data: { val: 1 } }, { label: 'two' }],
+		steps: [{ label: 'one', data: { val: 1 } }, { label: 'two' }, { label: 'three' }],
 		onDone: async ({ context, steps }) => 'done...',
 		// logger: createClog('wizard').debug as any,
 	});
 
+	const incrementor = (old) => {
+		old.val++;
+		return { ...old };
+	};
+
 	w.subscribe(({ step, steps }) => {
 		// clog(step);
 		assert(step.data.val === 1);
-		step.set({
-			data: (old) => {
-				old.val++;
-				return { ...old };
-			},
-		});
+		step.set({ data: incrementor });
 		assert(step.data.val === 2);
+	})();
+
+	await w.goto(2);
+
+	w.subscribe(({ step, steps }) => {
+		assert(step.label === 'three');
+		// update data from other step
+		steps[0].set({ data: incrementor });
+	})();
+
+	await w.goto(0);
+
+	w.subscribe(({ step, steps }) => {
+		assert(step.label === 'one');
+		// was incremented "from" step 3
+		assert(step.data.val === 3);
 	})();
 });
 
