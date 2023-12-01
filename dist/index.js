@@ -63,8 +63,10 @@ const createWizardStore = (label, options) => {
             if (v !== undefined && (steps[idx][k] !== v || isFn(v))) {
                 if (isFn(v))
                     v = v(steps[idx][k]);
-                steps[idx][k] = v;
-                changed++;
+                if (steps[idx][k] !== v) {
+                    steps[idx][k] = v;
+                    changed++;
+                }
             }
         });
         if (values.inProgress !== undefined && values.inProgress !== inProgress) {

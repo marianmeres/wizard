@@ -140,8 +140,10 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 				// set({ data: (old) => ({ ...old, foo: 'bar' }) })
 				if (isFn(v)) v = v(steps[idx][k]);
 				//
-				steps[idx][k] = v;
-				changed++;
+				if (steps[idx][k] !== v) {
+					steps[idx][k] = v;
+					changed++;
+				}
 			}
 		});
 
