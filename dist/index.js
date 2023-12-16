@@ -1,4 +1,4 @@
-const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},n=(r=undefined,n=null)=>{const s=t=>e(n?.persist)&&n.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return {publish:(e,r={})=>{t(e).forEach((e=>e(r)));},subscribe:r,subscribeOnce:(e,t)=>{const n=r(e,(e=>{t(e),n();}));return n},unsubscribeAll:t=>e.delete(t)}})(),c=r;s(c);const o=()=>c,u=e=>{c!==e&&(c=e,s(c),i.publish("change",c));};return {set:u,get:o,update:e=>{t(e,"[update]"),u(e(o()));},subscribe:e=>(t(e,"[subscribe]"),e(c),i.subscribe("change",e))}};
+const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},s=(r=void 0,s=null)=>{const n=t=>e(s?.persist)&&s.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return {publish:(e,r)=>{t(e).forEach((e=>e(r)));},subscribe:r,subscribeOnce:(e,t)=>{const s=r(e,(e=>{t(e),s();}));return s},unsubscribeAll:t=>e.delete(t)}})(),c=r;n(c);const o=()=>c,u=e=>{c!==e&&(c=e,n(c),i.publish("change",c));};return {set:u,get:o,update:e=>{t(e,"[update]"),u(e(o()));},subscribe:e=>(t(e,"[subscribe]"),e(c),i.subscribe("change",e))}};
 
 const isFn = (v) => typeof v === 'function';
 const deepClone = (data) => JSON.parse(JSON.stringify(data));
@@ -237,7 +237,7 @@ const createWizardStore = (label, options) => {
             },
         };
     });
-    const stateStore = n(outShape());
+    const stateStore = s(outShape());
     const wizard = {
         get: stateStore.get,
         subscribe: stateStore.subscribe,
