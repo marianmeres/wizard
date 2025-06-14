@@ -50,7 +50,7 @@ interface CreateWizardStoreOptions {
     }) => Promise<any>;
     logger?: (...args: any[]) => undefined;
 }
-export declare const createWizardStore: (label: Label, options: CreateWizardStoreOptions) => {
+export declare function createWizardStore(label: Label, options: CreateWizardStoreOptions): {
     get: () => {
         step: WizardStep;
         steps: WizardStep[];

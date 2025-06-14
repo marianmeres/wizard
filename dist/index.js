@@ -1,8 +1,8 @@
-const e=e=>"function"==typeof e,t=(t,r="")=>{if(!e(t))throw new TypeError(`${r} Expecting function arg`.trim())},s=(r=void 0,s=null)=>{const n=t=>e(s?.persist)&&s.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),r=(e,r)=>{if("function"!=typeof r)throw new TypeError("Expecting callback function as second argument");return t(e).add(r),()=>t(e).delete(r)};return {publish:(e,r)=>{t(e).forEach((e=>e(r)));},subscribe:r,subscribeOnce:(e,t)=>{const s=r(e,(e=>{t(e),s();}));return s},unsubscribeAll:t=>e.delete(t)}})(),c=r;n(c);const o=()=>c,u=e=>{c!==e&&(c=e,n(c),i.publish("change",c));};return {set:u,get:o,update:e=>{t(e,"[update]"),u(e(o()));},subscribe:e=>(t(e,"[subscribe]"),e(c),i.subscribe("change",e))}};
+const e=e=>"function"==typeof e,t=(t,s="")=>{if(!e(t))throw new TypeError(`${s} Expecting function arg`.trim())},r=(s,r=null)=>{const n=t=>e(null==r?void 0:r.persist)&&r.persist(t);let i=(()=>{const e=new Map,t=t=>(e.has(t)||e.set(t,new Set),e.get(t)),s=(e,s)=>{if(!e)throw new TypeError("Expecting valid event name.");if("function"!=typeof s)throw new TypeError("Expecting valid callback function.");return t(e).add(s),()=>t(e).delete(s)};return {publish:(e,s)=>{t(e).forEach((e=>e(s)));},subscribe:s,subscribeOnce:(e,t)=>{const r=s(e,(e=>{t(e),r();}));return r},unsubscribe:(e,s)=>{t(e).delete(s);},unsubscribeAll:t=>e.delete(t)}})(),o=s;n(o);const l=()=>o,c=e=>{o!==e&&(o=e,n(o),i.publish("change",o));};return {set:c,get:l,update:e=>{t(e,"[update]"),c(e(l()));},subscribe:e=>(t(e,"[subscribe]"),e(o),i.subscribe("change",e))}};
 
 const isFn = (v) => typeof v === 'function';
 const deepClone = (data) => JSON.parse(JSON.stringify(data));
-const createWizardStore = (label, options) => {
+function createWizardStore(label, options) {
     let { steps, context, preReset, onDone } = {
         steps: [],
         context: {},
@@ -237,7 +237,7 @@ const createWizardStore = (label, options) => {
             },
         };
     });
-    const stateStore = s(outShape());
+    const stateStore = r(outShape());
     const wizard = {
         get: stateStore.get,
         subscribe: stateStore.subscribe,
@@ -251,6 +251,6 @@ const createWizardStore = (label, options) => {
         resetCanGoNext,
     };
     return wizard;
-};
+}
 
 export { createWizardStore };

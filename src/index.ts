@@ -57,7 +57,7 @@ interface WizardStoreVal {
 const isFn = (v) => typeof v === 'function';
 const deepClone = (data) => JSON.parse(JSON.stringify(data)); // poor man's deep clone
 
-export const createWizardStore = (label: Label, options: CreateWizardStoreOptions) => {
+export function createWizardStore(label: Label, options: CreateWizardStoreOptions) {
 	let { steps, context, preReset, onDone } = {
 		steps: [],
 		context: {},
@@ -412,4 +412,4 @@ export const createWizardStore = (label: Label, options: CreateWizardStoreOption
 	};
 
 	return wizard;
-};
+}
