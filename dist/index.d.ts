@@ -35,9 +35,9 @@ interface WizardStep extends WizardStepConfig {
     previous: CallableFunction;
     set: (values: StepValues) => void;
 }
-interface CreateWizardStoreOptions {
+interface CreateWizardStoreOptions<T> {
     steps: WizardStepConfig[];
-    context?: any;
+    context?: T;
     preReset?: ({ context, wizard }: {
         context: any;
         wizard: any;
@@ -50,7 +50,7 @@ interface CreateWizardStoreOptions {
     }) => Promise<any>;
     logger?: (...args: any[]) => undefined;
 }
-export declare function createWizardStore(label: Label, options: CreateWizardStoreOptions): {
+export declare function createWizardStore<T>(label: Label, options: CreateWizardStoreOptions<T>): {
     get: () => {
         step: WizardStep;
         steps: WizardStep[];
@@ -61,7 +61,7 @@ export declare function createWizardStore(label: Label, options: CreateWizardSto
         steps: WizardStep[];
         inProgress: boolean;
     }>) => import("@marianmeres/store").Unsubscribe;
-    context: any;
+    context: T;
     next: (currentStepData?: any) => Promise<number>;
     previous: () => Promise<number>;
     reset: () => Promise<number>;

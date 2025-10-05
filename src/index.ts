@@ -34,11 +34,11 @@ interface WizardStep extends WizardStepConfig {
 	set: (values: StepValues) => void;
 }
 
-interface CreateWizardStoreOptions {
+interface CreateWizardStoreOptions<T> {
 	steps: WizardStepConfig[];
 	// arbitrary global object accessible to all steps, can be modified, but will not be
 	// reset on reset or previous actions (so should be considered more as readonly)
-	context?: any;
+	context?: T;
 	// optional, for various cleanups if necessary, will be called last (after each step's
 	// preReset)
 	preReset?: ({ context, wizard }) => Promise<any>;
@@ -57,14 +57,13 @@ interface WizardStoreVal {
 const isFn = (v) => typeof v === 'function';
 const deepClone = (data) => JSON.parse(JSON.stringify(data)); // poor man's deep clone
 
-export function createWizardStore(label: Label, options: CreateWizardStoreOptions) {
-	let { steps, context, preReset, onDone } = {
-		steps: [],
-		context: {},
-		preReset: () => null,
-		onDone: () => null,
-		...(options || {}),
-	};
+export function createWizardStore<T>(label: Label, options: CreateWizardStoreOptions<T>) {
+	let {
+		steps = [],
+		context = {} as T,
+		preReset = () => null,
+		onDone = () => null,
+	} = options || {};
 
 	if (!Array.isArray(steps) || steps.length < 2) {
 		throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);

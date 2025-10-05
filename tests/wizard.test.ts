@@ -11,7 +11,7 @@ const suite = new TestRunner(path.basename(fileURLToPath(import.meta.url)));
 const sleep = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 suite.test('basic flow', async () => {
-	const w = createWizardStore('foo', {
+	const w = createWizardStore<any>('foo', {
 		steps: [
 			{ label: 'one', foo: 123 },
 			{

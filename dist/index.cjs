@@ -5,13 +5,7 @@ const e=e=>"function"==typeof e,t=(t,s="")=>{if(!e(t))throw new TypeError(`${s} 
 const isFn = (v) => typeof v === 'function';
 const deepClone = (data) => JSON.parse(JSON.stringify(data));
 function createWizardStore(label, options) {
-    let { steps, context, preReset, onDone } = {
-        steps: [],
-        context: {},
-        preReset: () => null,
-        onDone: () => null,
-        ...(options || {}),
-    };
+    let { steps = [], context = {}, preReset = () => null, onDone = () => null, } = options || {};
     if (!Array.isArray(steps) || steps.length < 2) {
         throw new TypeError(`${label}: expecting array of at least 2 steps configs.`);
     }
