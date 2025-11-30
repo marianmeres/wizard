@@ -1,5 +1,8 @@
 # @marianmeres/wizard
 
+[![NPM version](https://img.shields.io/npm/v/@marianmeres/wizard.svg)](https://www.npmjs.com/package/@marianmeres/wizard)
+[![JSR version](https://jsr.io/badges/@marianmeres/wizard)](https://jsr.io/@marianmeres/wizard)
+
 Utility for high-level management of
 [wizard](https://en.wikipedia.org/wiki/Wizard_(software)) flows. Agnostic of actual
 business logic or rendering. [Store](https://github.com/marianmeres/store) compatible.
