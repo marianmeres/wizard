@@ -1,0 +1,244 @@
+# @marianmeres/wizard - LLM Reference Document
+
+## Package Overview
+
+A TypeScript utility for managing multi-step wizard flows. Framework-agnostic, reactive via store pattern subscriptions. Works with Deno and Node.js.
+
+## Installation
+
+```shell
+# Deno (JSR)
+deno add jsr:@marianmeres/wizard
+
+# Node.js (npm)
+npm i @marianmeres/wizard
+```
+
+## Core Concepts
+
+### Wizard
+A state machine managing navigation through ordered steps. Minimum 2 steps required.
+
+### Step
+Individual stage in the wizard flow. Each step has:
+- `label` - Human-readable identifier (string, i18n object, or function)
+- `data` - Step-specific data (generic type TData)
+- `canGoNext` - Boolean flag controlling forward navigation (default: true)
+- `error` - Current error state (null if none)
+- `index` - Zero-based position
+- `isFirst` / `isLast` - Position flags
+
+### Context
+Global object (generic type TContext) shared across all steps. Mutable but not reset on wizard.reset().
+
+### Hooks
+Pre-action callbacks executed before navigation:
+- `preNext` - Before moving forward
+- `prePrevious` - Before moving backward
+- `preReset` - Before resetting (per-step and global)
+
+## API Reference
+
+### createWizard<TData, TContext>(label, options)
+
+Creates a wizard instance.
+
+**Parameters:**
+- `label: Label` - Wizard identifier
+- `options.steps: WizardStepConfig[]` - Step configurations (min 2)
+- `options.context?: TContext` - Global context object
+- `options.onDone: (ctx) => Promise<void>` - Called when next() invoked on last step
+- `options.preReset?: (ctx) => Promise<void>` - Global reset hook
+- `options.logger?: Logger` - Debug logging function
+
+**Returns:** `Wizard<TData, TContext>`
+
+### Wizard Instance Methods
+
+```typescript
+// Navigation
+next(data?: Partial<TData>): Promise<number>  // Move forward, optionally merge data
+previous(): Promise<number>                    // Move backward
+reset(): Promise<number>                       // Reset to initial state
+goto(index, stepsData?, assert?): Promise<number>  // Jump to specific step
+
+// State
+get(): WizardStoreValue<TData, TContext>      // Get current state
+subscribe(callback): () => void                // Subscribe to changes (returns unsubscribe)
+
+// Utilities
+allowCanGoNext(): number      // Set all canGoNext to true
+resetCanGoNext(): number      // Restore initial canGoNext values
+publish(): number             // Force state emission
+
+// Properties
+context: TContext             // Global context (mutable)
+label: Label                  // Wizard label
+```
+
+### WizardStoreValue<TData, TContext>
+
+```typescript
+{
+  step: WizardStep<TData, TContext>    // Current step
+  steps: WizardStep<TData, TContext>[] // All steps
+  inProgress: boolean                   // True during async operations
+}
+```
+
+### WizardStep<TData, TContext>
+
+```typescript
+{
+  index: number
+  label: Label
+  data: TData
+  canGoNext: boolean
+  error: Error | string | null
+  isFirst: boolean
+  isLast: boolean
+  update(values: StepUpdateValues<TData>): void
+}
+```
+
+### StepUpdateValues<TData>
+
+```typescript
+{
+  data?: TData | ((current: TData) => TData)  // Direct value or updater function
+  error?: Error | string | null
+  canGoNext?: boolean
+}
+```
+
+### Hook Context
+
+```typescript
+{
+  context: TContext                           // Global context
+  update(values: StepUpdateValues<TData>): void  // Update current step
+  wizard: Wizard<TData, TContext>             // Wizard instance (limited use)
+}
+```
+
+## Navigation Behavior
+
+### next(data?)
+1. Merges provided data with current step data
+2. Clears step error
+3. Sets inProgress=true
+4. Executes preNext hook
+5. Checks canGoNext flag
+6. If last step and no error, calls onDone
+7. Sets inProgress=false
+8. Advances to next step if no error
+
+### previous()
+1. Sets inProgress=true
+2. Executes prePrevious hook
+3. Sets inProgress=false
+4. Always moves back (regardless of error)
+
+### goto(index, stepsData?, assert?)
+- Iterates through steps calling next() or previous()
+- `stepsData` array provides data for each step during forward navigation
+- `assert=true` (default): throws Error if navigation blocked
+- `assert=false`: stops at blocking step without throwing
+
+### reset()
+1. Iterates from current step to 0, calling preReset hooks
+2. Calls global preReset if defined
+3. Restores all steps to initial data and canGoNext values
+4. Sets current step to 0
+
+## Hook Safety Restrictions
+
+**IMPORTANT:** Navigation methods cannot be called from inside pre-hooks.
+
+Blocked methods (throw TypeError):
+- `wizard.next()`
+- `wizard.previous()`
+- `wizard.goto()`
+- `wizard.reset()`
+
+Safe operations inside hooks:
+- `update()` - Modify step state
+- `wizard.get()` - Read state
+- `wizard.context` - Access/modify context
+- `wizard.label` - Read label
+- `wizard.allowCanGoNext()` - Enable free navigation
+- `wizard.resetCanGoNext()` - Restore canGoNext flags
+- `wizard.publish()` - Force state emission
+
+Workaround for deferred navigation:
+```typescript
+preNext: async (_data, { wizard }) => {
+  setTimeout(() => wizard.reset(), 0);
+}
+```
+
+## Type System
+
+Two generic parameters:
+- `TData` - Shape of step data (shared type for all steps)
+- `TContext` - Shape of global context
+
+Both default to `Record<string, unknown>` if not specified.
+
+## Dependencies
+
+- `@marianmeres/store` (JSR) - Reactive store implementation
+
+## File Structure
+
+```
+src/
+  mod.ts      - Module entry point, re-exports wizard.ts
+  wizard.ts   - Main implementation with all types
+tests/
+  wizard.test.ts - Comprehensive test suite (21 tests)
+deno.json     - Deno configuration and dependencies
+```
+
+## Common Patterns
+
+### Validation in preNext
+```typescript
+preNext: async (data, { update, context }) => {
+  if (!isValid(data)) {
+    throw new Error("Validation failed");
+  }
+  update({ canGoNext: true });
+}
+```
+
+### Conditional navigation blocking
+```typescript
+{ label: "Step 2", canGoNext: false }  // Must explicitly enable
+```
+
+### Functional data updates
+```typescript
+step.update({ data: (prev) => ({ ...prev, count: prev.count + 1 }) });
+```
+
+### Skipping to step with prefilled data
+```typescript
+await wizard.goto(3, [null, { fieldA: "value" }, { fieldB: "value" }]);
+```
+
+## Error Handling
+
+- Hook errors are caught and stored in `step.error`
+- onDone errors are caught and stored in last step's error
+- preReset errors are silently logged (reset always completes)
+- `goto()` with `assert=true` throws if blocked; check step errors for details
+
+## Package Info
+
+- **Name:** @marianmeres/wizard
+- **Version:** 2.0.0
+- **Author:** Marian Meres
+- **Repository:** https://github.com/marianmeres/wizard
+- **License:** MIT
+- **Registry:** JSR (jsr:@marianmeres/wizard), npm (@marianmeres/wizard)
