@@ -232,6 +232,9 @@ Key changes:
 - `set` in hook context → `update`
 - Full generic type support
 
+## License
+
+MIT
 
 See [tests](./tests/wizard.test.ts) for more examples.
 
@@ -241,5 +244,4 @@ See [tests](./tests/wizard.test.ts) for more examples.
 - **Author:** Marian Meres
 - **Repository:** https://github.com/marianmeres/wizard
 - **License:** MIT
-
 
