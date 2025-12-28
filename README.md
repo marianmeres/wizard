@@ -2,6 +2,7 @@
 
 [![NPM version](https://img.shields.io/npm/v/@marianmeres/wizard.svg)](https://www.npmjs.com/package/@marianmeres/wizard)
 [![JSR version](https://jsr.io/badges/@marianmeres/wizard)](https://jsr.io/@marianmeres/wizard)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Utility for high-level management of
 [wizard](https://en.wikipedia.org/wiki/Wizard_(software)) flows. Agnostic of actual
@@ -102,77 +103,38 @@ wizard.context; // { apiUrl: "https://api.example.com" }
 wizard.label; // "registration"
 ```
 
-## Main API
+## API Overview
 
 ### `createWizard<TData, TContext>(label, options)`
 
-Creates a wizard instance.
+Creates a wizard instance with full TypeScript support.
 
-**Type Parameters:**
+**Key options:**
 
-- `TData` - Type for step data (shared across all steps)
-- `TContext` - Type for global context object
+- `steps` - Array of step configurations (minimum 2 required)
+- `context` - Global context object (optional)
+- `onDone` - Callback when completing the last step
 
-**Parameters:**
+**Navigation methods:**
 
-- `label` - Human-readable wizard identifier
-- `options.steps` - Array of step configurations (minimum 2)
-- `options.context` - Global context object (optional)
-- `options.onDone` - Callback when completing the last step
-- `options.preReset` - Global reset hook (optional)
-- `options.logger` - Debug logger function (optional)
+- `next(data?)` - Move to next step
+- `previous()` - Move to previous step
+- `reset()` - Reset to initial state
+- `goto(index, stepsData?, assert?)` - Jump to specific step
 
-### Step Configuration
+**Utilities:**
 
-```typescript
-interface WizardStepConfig<TData, TContext> {
-	label: string | Record<string, string> | (() => string);
-	data?: TData;
-	canGoNext?: boolean; // defaults to true
-	preNext?: (data, { update, context, wizard }) => Promise<void> | void;
-	prePrevious?: (data, { update, context, wizard }) => Promise<void> | void;
-	preReset?: (data, { update, context, wizard }) => Promise<void> | void;
-}
-```
+- `allowCanGoNext()` / `resetCanGoNext()` - Control navigation flags
+- `subscribe(callback)` - React to state changes
+- `get()` - Get current state synchronously
 
-### Wizard Instance
-
-```typescript
-interface Wizard<TData, TContext> {
-	// Store interface
-	get(): WizardStoreValue<TData, TContext>;
-	subscribe(callback): () => void;
-
-	// Navigation
-	next(data?: Partial<TData>): Promise<number>;
-	previous(): Promise<number>;
-	reset(): Promise<number>;
-	goto(index, stepsData?, assert?): Promise<number>;
-
-	// Utilities
-	allowCanGoNext(): number;
-	resetCanGoNext(): number;
-	publish(): number;
-
-	// Properties
-	context: TContext;
-	label: Label;
-}
-```
-
-### Store Value
-
-```typescript
-interface WizardStoreValue<TData, TContext> {
-	step: WizardStep<TData, TContext>; // Current step
-	steps: WizardStep<TData, TContext>[]; // All steps
-	inProgress: boolean; // True during async operations
-}
-```
+For complete API documentation including all types and interfaces, see
+**[API.md](API.md)**.
 
 ## Hook Safety
 
-Navigation methods (`next()`, `previous()`, `goto()`, `reset()`) **cannot be called from inside pre-hooks**. Attempting to do so will throw a `TypeError`.
+Navigation methods (`next()`, `previous()`, `goto()`, `reset()`) **cannot be called from
+inside pre-hooks**. Attempting to do so will throw a `TypeError`.
 
 ```typescript
 // ❌ This will throw TypeError
@@ -205,10 +167,10 @@ const wizard = createWizard("foo", {
 If you need to trigger navigation based on hook logic, defer it using `setTimeout`:
 
 ```typescript
-preNext: async (_data, { wizard }) => {
+preNext: (async (_data, { wizard }) => {
 	// Deferred navigation (runs after hook completes)
 	setTimeout(() => wizard.reset(), 0);
-};
+});
 ```
 
 ## Migration from v1.x
@@ -238,13 +200,3 @@ Key changes:
 ## License
 
 MIT
-
-See [tests](./tests/wizard.test.ts) for more examples.
-
-## Package Identity
-
-- **Name:** @marianmeres/wizard
-- **Author:** Marian Meres
-- **Repository:** https://github.com/marianmeres/wizard
-- **License:** MIT
-
