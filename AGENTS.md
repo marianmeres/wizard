@@ -1,14 +1,17 @@
-# @marianmeres/wizard - Agent Reference
+# @marianmeres/wizard - Agent Guide
 
-## Package Overview
+Multi-step wizard flow state management. UI/framework agnostic. Store-compatible for
+reactive frameworks.
 
-- **Name:** `@marianmeres/wizard`
-- **Purpose:** Multi-step wizard flow state management
-- **Runtime:** Deno + Node.js (via npm build)
-- **License:** MIT
-- **Main Export:** `createWizard<TData, TContext>(label, options)`
+## Quick Reference
 
-## Architecture
+- **Stack**: Deno + TypeScript, npm build for Node.js
+- **Run**: `deno test` | **Build**: `deno task npm:build` | **Format**: `deno fmt`
+- **Entry**: `src/mod.ts` → exports from `src/wizard.ts`
+- **Main Export**: `createWizard<TData, TContext>(label, options)`
+- **Dependency**: `@marianmeres/store`
+
+## Project Structure
 
 ```
 src/
@@ -19,16 +22,38 @@ tests/
 └── wizard.test.ts  # Deno test suite (21 tests)
 ```
 
-## Core Concepts
+## Critical Conventions
+
+1. **Minimum 2 steps** required (throws TypeError otherwise)
+2. **No navigation inside hooks** - `next()`, `previous()`, `goto()`, `reset()` throw
+   TypeError if called within `preNext/prePrevious/preReset` hooks
+3. **canGoNext=false blocks next()** - step must enable it via
+   `update({ canGoNext: true })`
+4. **Context persists** - not reset on `reset()`, unlike step data
+
+## Before Making Changes
+
+- [ ] Review existing patterns in `src/wizard.ts`
+- [ ] Run `deno test` to verify tests pass
+- [ ] Check API.md for type documentation
+
+## Documentation Index
+
+- [API.md](./API.md) - Complete type reference and method documentation
+- [README.md](./README.md) - Usage examples and quick start
+
+---
+
+## Architecture
 
 ### Wizard = State Machine
 
 A wizard is a linear state machine with:
 
-- **Steps:** Array of step configs (minimum 2)
-- **Current Index:** Zero-based, starts at 0
-- **Direction:** Forward (next), backward (previous), or jump (goto)
-- **Completion:** `onDone` callback fires when `next()` called on last step
+- **Steps**: Array of step configs (minimum 2)
+- **Current Index**: Zero-based, starts at 0
+- **Direction**: Forward (next), backward (previous), or jump (goto)
+- **Completion**: `onDone` callback fires when `next()` called on last step
 
 ### State Shape
 
@@ -81,18 +106,17 @@ next() called
   └─> publish()
 ```
 
-### Hook Safety Constraint
+### Hook Safety
 
-Navigation methods **throw TypeError** if called inside hooks:
+Navigation methods **throw TypeError** inside hooks:
 
-- `next()`, `previous()`, `reset()`, `goto()` - PROHIBITED in hooks
-- `update()`, `get()`, `publish()`, `allowCanGoNext()`, `resetCanGoNext()` - ALLOWED
-
-Workaround: `setTimeout(() => wizard.reset(), 0)`
+- **PROHIBITED**: `next()`, `previous()`, `reset()`, `goto()`
+- **ALLOWED**: `update()`, `get()`, `publish()`, `allowCanGoNext()`, `resetCanGoNext()`
+- **Workaround**: `setTimeout(() => wizard.reset(), 0)`
 
 ### Error Handling
 
-| Hook          | Error Effect                                        |
+| Hook          | Effect                                              |
 | ------------- | --------------------------------------------------- |
 | `preNext`     | Captured in `step.error`, prevents navigation       |
 | `prePrevious` | Captured in `step.error`, navigation proceeds       |
@@ -107,34 +131,6 @@ On `reset()`:
 - `step.error` → set to null
 - `step.canGoNext` → restored to initial config value
 - `context` → NOT reset (mutable, persists)
-
-## TypeScript Generics
-
-```typescript
-createWizard<TData, TContext>(label, options);
-```
-
-- `TData` - Shape of step data (shared across all steps)
-- `TContext` - Shape of global context object
-- Both default to `Record<string, unknown>`
-
-## Dependencies
-
-- `@marianmeres/store` - Reactive store implementation
-
-## Testing
-
-```bash
-deno test              # Run all tests
-deno test --watch      # Watch mode
-```
-
-## Building for npm
-
-```bash
-deno task npm:build    # Build to .npm-dist/
-deno task npm:publish  # Build and publish
-```
 
 ## Common Patterns
 
@@ -177,9 +173,12 @@ wizard.subscribe(({ steps }) => {
 await wizard.goto(2, [null, { skipValidation: true }]);
 ```
 
-## File Locations
+## TypeScript Generics
 
-- Entry point: `src/mod.ts`
-- Implementation: `src/wizard.ts`
-- Tests: `tests/wizard.test.ts`
-- Config: `deno.json`
+```typescript
+createWizard<TData, TContext>(label, options);
+```
+
+- `TData` - Shape of step data (shared across all steps)
+- `TContext` - Shape of global context object
+- Both default to `Record<string, unknown>`
