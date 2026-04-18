@@ -6,7 +6,7 @@ import { createStore, type StoreLike } from "@marianmeres/store";
 
 /**
  * Human readable label - can be a simple string, i18n-like object { locale: label },
- * or a function returning string
+ * or a function returning string. Use `resolveLabel()` to obtain a string.
  */
 export type Label = string | Record<string, string> | (() => string);
 
@@ -25,6 +25,8 @@ export interface StepUpdateValues<TData> {
 	error?: Error | string | null;
 	/** Whether navigation to next step is allowed */
 	canGoNext?: boolean;
+	/** Whether navigation to previous step is allowed */
+	canGoPrevious?: boolean;
 }
 
 /**
@@ -57,9 +59,15 @@ export interface WizardStepConfig<TData, TContext> {
 	data?: TData;
 	/**
 	 * Flag indicating whether wizard can proceed from this step.
-	 * Defaults to true. The step should modify this once business conditions are met.
+	 * Defaults to true. Set to false to require the step to enable it
+	 * (e.g. from within `preNext` via `update({ canGoNext: true })`).
 	 */
 	canGoNext?: boolean;
+	/**
+	 * Flag indicating whether wizard can navigate back from this step.
+	 * Defaults to true. Set to false to prevent `previous()` from moving.
+	 */
+	canGoPrevious?: boolean;
 	/** Called before moving to next step */
 	preNext?: PreHook<TData, TContext>;
 	/** Called before moving to previous step */
@@ -69,22 +77,34 @@ export interface WizardStepConfig<TData, TContext> {
 }
 
 /**
- * Runtime step instance with computed properties and bound update method
+ * Runtime step instance with computed properties and bound update method.
+ *
+ * Note: The raw hook functions (`preNext`, `prePrevious`, `preReset`) are
+ * intentionally NOT exposed on the runtime step object — they are held
+ * internally and invoked through the wizard's lifecycle so that lifecycle
+ * guards and error capture are always applied.
  */
-export interface WizardStep<TData, TContext>
-	extends Omit<WizardStepConfig<TData, TContext>, "data"> {
+export interface WizardStep<TData, TContext> {
+	/** Human readable step label */
+	label: Label;
 	/** Zero-based index of this step */
 	index: number;
 	/** Step data (always initialized, never undefined at runtime) */
 	data: TData;
 	/** Current error state (null if no error) */
 	error: Error | string | null;
+	/** Whether navigation to next step is allowed */
+	canGoNext: boolean;
+	/** Whether navigation to previous step is allowed */
+	canGoPrevious: boolean;
 	/** Whether this is the first step */
 	isFirst: boolean;
 	/** Whether this is the last step */
 	isLast: boolean;
-	/** Update this step's state (data, error, canGoNext) */
+	/** Update this step's state (data, error, canGoNext, canGoPrevious) */
 	update: (values: StepUpdateValues<TData>) => void;
+	/** Convenience: clear this step's error */
+	clearError: () => void;
 }
 
 /**
@@ -123,6 +143,12 @@ export interface WizardStoreValue<TData, TContext> {
 	steps: WizardStep<TData, TContext>[];
 	/** Whether an async operation is in progress */
 	inProgress: boolean;
+	/**
+	 * True after `onDone` has completed successfully. Subsequent `next()`
+	 * calls on the last step are no-ops until `reset()` or `previous()` is
+	 * called.
+	 */
+	isDone: boolean;
 }
 
 /**
@@ -158,14 +184,14 @@ export interface Wizard<TData, TContext> {
 }
 
 // -----------------------------------------------------------------------------
-// Implementation
+// Helpers
 // -----------------------------------------------------------------------------
 
 const isFn = (v: unknown): v is (...args: unknown[]) => unknown =>
 	typeof v === "function";
 
 /**
- * Deep clone using structuredClone with fallback to JSON for edge cases
+ * Deep clone using structuredClone with fallback to JSON for edge cases.
  */
 function deepClone<T>(data: T): T {
 	try {
@@ -175,6 +201,37 @@ function deepClone<T>(data: T): T {
 		return JSON.parse(JSON.stringify(data));
 	}
 }
+
+/**
+ * Resolves a {@link Label} to a plain string.
+ *
+ * - `string`           → returned as-is
+ * - `() => string`     → invoked and result returned
+ * - `Record<string,string>` → value for `locale` if present, else first value,
+ *   else empty string
+ *
+ * @example
+ * ```ts
+ * resolveLabel("Step 1");                         // "Step 1"
+ * resolveLabel({ en: "Step 1", de: "Schritt 1" }, "de"); // "Schritt 1"
+ * resolveLabel({ en: "Step 1" });                 // "Step 1"
+ * resolveLabel(() => "Step 1");                   // "Step 1"
+ * ```
+ */
+export function resolveLabel(label: Label, locale?: string): string {
+	if (typeof label === "string") return label;
+	if (typeof label === "function") return label();
+	if (label && typeof label === "object") {
+		if (locale && locale in label) return label[locale];
+		const values = Object.values(label);
+		return values[0] ?? "";
+	}
+	return "";
+}
+
+// -----------------------------------------------------------------------------
+// Implementation
+// -----------------------------------------------------------------------------
 
 /**
  * Creates a wizard store for managing multi-step flows.
@@ -210,7 +267,7 @@ function deepClone<T>(data: T): T {
  *   },
  * });
  *
- * wizard.subscribe(({ step, steps, inProgress }) => {
+ * wizard.subscribe(({ step, steps, inProgress, isDone }) => {
  *   // Update UI
  * });
  * ```
@@ -238,82 +295,106 @@ export function createWizard<
 		if (logger) logger(...args);
 	};
 
-	// Track if we're inside a pre-hook (to prevent reset during hooks)
-	let inPreHook = false;
+	// Concurrency guard — true while a top-level navigation (next/previous/
+	// goto/reset) is in-flight. Concurrent calls (including calls made from
+	// inside pre-hooks/onDone/globalPreReset) are silently ignored and simply
+	// return `current`. This also subsumes the former "cannot call navigation
+	// from inside pre-hooks" check — the two cases are indistinguishable from
+	// flag state alone, so they collapse into one consistent rule.
+	let isNavigating = false;
 
-	// Wrap pre-hooks to track execution state
-	const wrapPreHook = <T extends PreHook<TData, TContext> | undefined>(
-		hook: T,
-	): PreHook<TData, TContext> => {
-		const fn = isFn(hook) ? hook : () => {};
-		return async (data, ctx) => {
-			inPreHook = true;
-			try {
-				await fn(data, ctx);
-			} finally {
-				inPreHook = false;
-			}
-		};
-	};
-
-	// Current step index
 	let current = 0;
 	const maxIndex = stepConfigs.length - 1;
 
-	// Backups for reset
 	const dataBackup: TData[] = [];
 	const canGoNextBackup: boolean[] = [];
+	const canGoPreviousBackup: boolean[] = [];
 
-	// Wrapped pre-hooks
 	const preHooks: {
-		preNext: PreHook<TData, TContext>;
-		prePrevious: PreHook<TData, TContext>;
-		preReset: PreHook<TData, TContext>;
+		preNext: (data: TData, ctx: HookContext<TData, TContext>) => Promise<void>;
+		prePrevious: (
+			data: TData,
+			ctx: HookContext<TData, TContext>,
+		) => Promise<void>;
+		preReset: (data: TData, ctx: HookContext<TData, TContext>) => Promise<void>;
 	}[] = [];
 
-	// In-progress flag
 	let inProgress = false;
+	let isDone = false;
 
-	// Initialize steps array
+	// Thin wrapper that normalizes optional callbacks to always-callable
+	// async functions — no lifecycle flag is toggled here; reentrancy is
+	// handled by the concurrency guard on the public methods.
+	const wrapOptional = <TArgs extends unknown[], TRet>(
+		fn: ((...args: TArgs) => TRet | Promise<TRet>) | undefined,
+	): (...args: TArgs) => Promise<TRet | undefined> => {
+		const actual = isFn(fn)
+			? (fn as (...args: TArgs) => TRet | Promise<TRet>)
+			: undefined;
+		return async (...args: TArgs) => {
+			if (!actual) return undefined;
+			return await actual(...args);
+		};
+	};
+
+	const wrappedOnDone = wrapOptional(onDone);
+	const wrappedGlobalPreReset = wrapOptional(globalPreReset);
+
+	// Build steps WITHOUT spreading the raw config — raw hooks must not leak
+	// onto the runtime step object, because calling them directly would
+	// bypass lifecycle tracking and error capture.
 	const steps: WizardStep<TData, TContext>[] = stepConfigs.map((config, index) => {
 		const data = (config.data ?? {}) as TData;
 		const canGoNext = config.canGoNext ?? true;
+		const canGoPrevious = config.canGoPrevious ?? true;
 
-		// Store backups
 		dataBackup[index] = deepClone(data);
 		canGoNextBackup[index] = canGoNext;
+		canGoPreviousBackup[index] = canGoPrevious;
 
-		// Store wrapped hooks
 		preHooks[index] = {
-			preNext: wrapPreHook(config.preNext),
-			prePrevious: wrapPreHook(config.prePrevious),
-			preReset: wrapPreHook(config.preReset),
+			preNext: wrapOptional(config.preNext) as (
+				data: TData,
+				ctx: HookContext<TData, TContext>,
+			) => Promise<void>,
+			prePrevious: wrapOptional(config.prePrevious) as (
+				data: TData,
+				ctx: HookContext<TData, TContext>,
+			) => Promise<void>,
+			preReset: wrapOptional(config.preReset) as (
+				data: TData,
+				ctx: HookContext<TData, TContext>,
+			) => Promise<void>,
 		};
 
 		return {
-			...config,
 			label: config.label || `${index + 1}`,
 			index,
 			data,
 			canGoNext,
+			canGoPrevious,
 			error: null,
 			isFirst: index === 0,
 			isLast: index === maxIndex,
-			// Will be properly bound after wizard is created
 			update: () => {},
+			clearError: () => {},
 		};
 	});
 
-	// Create the store
 	const getStoreValue = (): WizardStoreValue<TData, TContext> => ({
 		steps,
 		step: steps[current],
 		inProgress,
+		isDone,
 	});
 
 	const store = createStore<WizardStoreValue<TData, TContext>>(getStoreValue());
 
-	// Low-level update for a specific step index
+	// Low-level update for a specific step index.
+	// Note: when `data` is present, we always publish — the user's intent is
+	// "commit this value". Reference-equality short-circuits were removed
+	// because in-place mutation + same-reference passing previously produced
+	// silent no-ops (a common footgun).
 	const updateStep = (index: number, values: StepUpdateValues<TData>): void => {
 		log(`  updateStep(${index})`, values);
 
@@ -324,10 +405,8 @@ export function createWizard<
 			const newData: TData = typeof values.data === "function"
 				? (values.data as (current: TData) => TData)(step.data)
 				: values.data;
-			if (step.data !== newData) {
-				step.data = newData;
-				changed = true;
-			}
+			step.data = newData;
+			changed = true;
 		}
 
 		if (values.error !== undefined && step.error !== values.error) {
@@ -343,12 +422,19 @@ export function createWizard<
 			}
 		}
 
+		if (values.canGoPrevious !== undefined) {
+			const val = !!values.canGoPrevious;
+			if (step.canGoPrevious !== val) {
+				step.canGoPrevious = val;
+				changed = true;
+			}
+		}
+
 		if (changed) {
 			store.set(getStoreValue());
 		}
 	};
 
-	// Set inProgress and publish
 	const setInProgress = (value: boolean): void => {
 		if (inProgress !== value) {
 			inProgress = value;
@@ -356,13 +442,11 @@ export function createWizard<
 		}
 	};
 
-	// Publish current state
 	const publish = (): number => {
 		store.set(getStoreValue());
 		return current;
 	};
 
-	// Update for current step
 	const updateCurrent = (values: StepUpdateValues<TData>): void => {
 		updateStep(current, values);
 	};
@@ -371,41 +455,36 @@ export function createWizard<
 	// deno-lint-ignore prefer-const
 	let wizard: Wizard<TData, TContext>;
 
-	// Create hook context
 	const createHookContext = (index: number): HookContext<TData, TContext> => ({
 		context,
 		update: (values) => updateStep(index, values),
 		wizard,
 	});
 
-	// Helper to check if navigation is allowed
-	const assertNotInHook = (method: string): void => {
-		if (inPreHook) {
-			throw new TypeError(
-				`Cannot call ${method}() from inside pre-hooks. Use setTimeout to defer if needed.`,
-			);
-		}
-	};
+	// -------------------------------------------------------------------------
+	// Internal navigation — no concurrency guards. Public wrappers below
+	// enforce them. Separating the two avoids re-entrancy issues when `goto`
+	// needs to call `next`/`previous` while its own guard is held.
+	// -------------------------------------------------------------------------
 
-	// Navigation: next
-	const next = async (currentStepData?: Partial<TData>): Promise<number> => {
-		assertNotInHook("next");
+	const _next = async (currentStepData?: Partial<TData>): Promise<number> => {
 		log(`next()`, { current });
 		const idx = current;
 
-		// Merge data
+		// Defensive: public `next` already short-circuits when isDone. Kept
+		// here in case `_next` is reached through another path in the future.
+		if (isDone) return current;
+
 		steps[idx].data = {
 			...dataBackup[idx],
 			...(steps[idx].data || {}),
 			...(currentStepData || {}),
 		} as TData;
 
-		// Clear error
 		steps[idx].error = null;
 
 		setInProgress(true);
 
-		// Run preNext hook
 		try {
 			await preHooks[idx].preNext(steps[idx].data, createHookContext(idx));
 		} catch (e) {
@@ -413,21 +492,20 @@ export function createWizard<
 			log(`  error in preNext(${idx})`, steps[idx].error);
 		}
 
-		// Check canGoNext
 		if (!steps[idx].canGoNext) {
 			steps[idx].error ??=
 				`Step (${idx}): Cannot proceed. (Hint: check 'canGoNext' flag)`;
 		}
 
-		// If last step and no error, call onDone
 		if (!steps[idx].error && steps[idx].isLast) {
 			try {
-				await onDone({
+				await wrappedOnDone({
 					context,
 					steps,
 					wizard,
 					update: updateCurrent,
 				});
+				isDone = true;
 			} catch (e) {
 				steps[idx].error = e instanceof Error ? e : new Error(String(e));
 				log(`  error in onDone()`, steps[idx].error);
@@ -436,22 +514,26 @@ export function createWizard<
 
 		setInProgress(false);
 
-		// Move forward if no error
-		if (!steps[idx].error) {
-			current = Math.min(maxIndex, current + 1);
+		// Explicit `!isLast` — previously the increment was clamped by
+		// Math.min(maxIndex, current + 1), which masked state-corruption bugs
+		// where onDone (or any captured reference) mutated `current`.
+		if (!steps[idx].error && !steps[idx].isLast) {
+			current += 1;
 			log(`  incremented pointer to ${current}`);
-			// Clear any historical error on the new step
 			steps[current].error = null;
 		}
 
 		return publish();
 	};
 
-	// Navigation: previous
-	const previous = async (): Promise<number> => {
-		assertNotInHook("previous");
+	const _previous = async (): Promise<number> => {
 		log(`previous()`, { current });
 		const idx = current;
+
+		// Clear leaving step's error before running prePrevious (symmetric
+		// with _next — both publish a clean error slate before invoking the
+		// user's hook).
+		steps[idx].error = null;
 
 		setInProgress(true);
 
@@ -464,20 +546,120 @@ export function createWizard<
 
 		setInProgress(false);
 
-		// Always go back regardless of error
-		current = Math.max(0, current - 1);
-		log(`  decremented pointer to ${current}`);
+		// canGoPrevious blocks backward navigation. prePrevious hook errors
+		// do NOT block — they are captured but navigation still proceeds,
+		// which preserves the documented "back always works" semantic unless
+		// the step explicitly opts out via `canGoPrevious: false`.
+		if (steps[idx].canGoPrevious && !steps[idx].isFirst) {
+			current -= 1;
+			log(`  decremented pointer to ${current}`);
+			// Clear destination step's stale error on arrival (symmetric
+			// with _next's forward arrival).
+			steps[current].error = null;
+			// Navigating away from the completed state.
+			isDone = false;
+		}
 
 		return publish();
 	};
 
-	// Navigation: goto
+	const _reset = async (): Promise<number> => {
+		log(`reset()`, { current });
+
+		// Single inProgress transition instead of toggling per step (avoids
+		// subscriber flicker through intermediate step indices).
+		setInProgress(true);
+
+		// Run per-step preReset hooks in reverse order. Do NOT mutate
+		// `current` during the walk — subscribers should observe reset as a
+		// single transition from "wherever we were" to "step 0".
+		for (let i = current; i >= 0; i--) {
+			try {
+				await preHooks[i].preReset(steps[i].data, createHookContext(i));
+			} catch (e) {
+				log(`  swallowed error in preReset(${i})`, e);
+			}
+		}
+
+		try {
+			await wrappedGlobalPreReset({ context, wizard });
+		} catch (e) {
+			log(`  swallowed error in global preReset()`, e);
+		}
+
+		for (let i = 0; i < steps.length; i++) {
+			steps[i].data = deepClone(dataBackup[i]);
+			steps[i].error = null;
+			steps[i].canGoNext = canGoNextBackup[i];
+			steps[i].canGoPrevious = canGoPreviousBackup[i];
+		}
+
+		current = 0;
+		isDone = false;
+		// Direct assignment (not setInProgress) — avoids a duplicate publish;
+		// the final `publish()` below emits the new state as a single event.
+		inProgress = false;
+
+		return publish();
+	};
+
+	// -------------------------------------------------------------------------
+	// Public navigation — enforces lifecycle and concurrency guards.
+	// -------------------------------------------------------------------------
+
+	const next = async (currentStepData?: Partial<TData>): Promise<number> => {
+		if (isNavigating) {
+			log(`next() ignored — navigation already in progress`);
+			return current;
+		}
+		if (isDone) {
+			log(`next() ignored — wizard is already done`);
+			return current;
+		}
+		isNavigating = true;
+		try {
+			return await _next(currentStepData);
+		} finally {
+			isNavigating = false;
+		}
+	};
+
+	const previous = async (): Promise<number> => {
+		if (isNavigating) {
+			log(`previous() ignored — navigation already in progress`);
+			return current;
+		}
+		isNavigating = true;
+		try {
+			return await _previous();
+		} finally {
+			isNavigating = false;
+		}
+	};
+
+	const reset = async (): Promise<number> => {
+		if (isNavigating) {
+			log(`reset() ignored — navigation already in progress`);
+			return current;
+		}
+		isNavigating = true;
+		try {
+			return await _reset();
+		} finally {
+			isNavigating = false;
+		}
+	};
+
 	const goto = async (
 		targetIndex: number,
 		stepsData: (Partial<TData> | null)[] = [],
 		assert = true,
 	): Promise<number> => {
-		assertNotInHook("goto");
+		if (isNavigating) {
+			log(`goto() ignored — navigation already in progress`);
+			return current;
+		}
+
 		log(`goto(${targetIndex})`, { current });
 
 		if (targetIndex < 0 || targetIndex > maxIndex) {
@@ -488,79 +670,58 @@ export function createWizard<
 			return current;
 		}
 
-		let movedToIdx = current;
-		let lastErrIdx: number | undefined;
+		isNavigating = true;
+		try {
+			let lastErrIdx: number | undefined;
 
-		if (targetIndex < current) {
-			// Going back
-			for (let i = current; i > targetIndex; i--) {
-				movedToIdx = await previous();
-				if (steps[i].error) {
-					log(`  error in goto back loop (index ${i})`, steps[i].error);
-					lastErrIdx = i;
-					break;
+			// Loop while progress is made. If `current` fails to advance
+			// toward `targetIndex`, the loop exits (either on an explicit
+			// error on the step, or on a silent block e.g. canGoPrevious=false).
+			if (targetIndex < current) {
+				while (current > targetIndex) {
+					const idx = current;
+					await _previous();
+					if (current === idx) {
+						lastErrIdx = idx;
+						break;
+					}
+					if (steps[idx].error) {
+						log(`  error in goto back loop (index ${idx})`, steps[idx].error);
+						lastErrIdx = idx;
+						break;
+					}
+				}
+			} else {
+				while (current < targetIndex) {
+					const idx = current;
+					await _next(stepsData[idx] ?? undefined);
+					if (current === idx) {
+						lastErrIdx = idx;
+						break;
+					}
+					if (steps[idx].error) {
+						log(
+							`  error in goto forward loop (index ${idx})`,
+							steps[idx].error,
+						);
+						lastErrIdx = idx;
+						break;
+					}
 				}
 			}
-		} else {
-			// Going forward
-			for (let i = current; i < targetIndex; i++) {
-				movedToIdx = await next(stepsData[i] ?? undefined);
-				if (steps[i].error) {
-					log(`  error in goto forward loop (index ${i})`, steps[i].error);
-					lastErrIdx = i;
-					break;
-				}
+
+			if (assert && lastErrIdx !== undefined) {
+				throw new Error(
+					`The 'goto(${targetIndex})' command did not succeed. Check step[${lastErrIdx}]'s error.`,
+				);
 			}
-		}
 
-		if (assert && lastErrIdx !== undefined) {
-			throw new Error(
-				`The 'goto(${targetIndex})' command did not succeed. Check step[${lastErrIdx}]'s error.`,
-			);
+			return current;
+		} finally {
+			isNavigating = false;
 		}
-
-		return movedToIdx;
 	};
 
-	// Reset
-	const reset = async (): Promise<number> => {
-		assertNotInHook("reset");
-		log(`reset()`, { current });
-
-		// Reset from current back to start
-		for (let i = current; i >= 0; i--) {
-			current = i;
-			setInProgress(true);
-			try {
-				await preHooks[i].preReset(steps[i].data, createHookContext(i));
-			} catch (e) {
-				// Silence errors during reset
-				log(`  swallowed error in preReset(${i})`, e);
-			}
-			setInProgress(false);
-		}
-
-		// Global preReset
-		if (globalPreReset) {
-			try {
-				await globalPreReset({ context, wizard });
-			} catch (e) {
-				log(`  swallowed error in global preReset()`, e);
-			}
-		}
-
-		// Restore initial data and flags
-		for (let i = 0; i < steps.length; i++) {
-			steps[i].data = deepClone(dataBackup[i]);
-			steps[i].error = null;
-			steps[i].canGoNext = canGoNextBackup[i];
-		}
-
-		current = 0;
-		return publish();
-	};
-
-	// Allow free navigation
 	const allowCanGoNext = (): number => {
 		for (const step of steps) {
 			step.canGoNext = true;
@@ -568,7 +729,6 @@ export function createWizard<
 		return publish();
 	};
 
-	// Reset canGoNext to initial values
 	const resetCanGoNext = (): number => {
 		for (let i = 0; i < steps.length; i++) {
 			steps[i].canGoNext = canGoNextBackup[i];
@@ -576,12 +736,12 @@ export function createWizard<
 		return publish();
 	};
 
-	// Bind update method to each step
+	// Bind update / clearError to each step.
 	for (let i = 0; i < steps.length; i++) {
 		steps[i].update = (values) => updateStep(i, values);
+		steps[i].clearError = () => updateStep(i, { error: null });
 	}
 
-	// Create wizard instance
 	wizard = {
 		get: store.get,
 		subscribe: store.subscribe,

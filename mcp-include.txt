@@ -1,1 +1,3 @@
-Multi-step wizard flow state management. UI/framework agnostic, store-compatible for reactive frameworks. Provides linear navigation with validation hooks, error handling, and async support.
+Multi-step wizard flow state management. UI/framework agnostic, store-compatible for 
+reactive frameworks. Provides linear navigation with validation hooks, error handling, 
+and async support.

@@ -22,9 +22,11 @@ npm i @marianmeres/wizard
 
 - Multi-step wizard flow management
 - Reactive state via store subscriptions
-- Step validation with `canGoNext` flag
+- Forward and backward step gating (`canGoNext`, `canGoPrevious`)
 - Pre-action hooks (`preNext`, `prePrevious`, `preReset`)
 - Global context shared across all steps
+- Concurrent-navigation safe — double-clicks and hook re-entry are silently ignored
+- Terminal `isDone` flag with double-completion protection
 - Full TypeScript support with generics
 
 ## Example usage
@@ -32,7 +34,6 @@ npm i @marianmeres/wizard
 ```typescript
 import { createWizard } from "@marianmeres/wizard";
 
-// Define your data and context types for full type safety
 interface StepData {
 	name?: string;
 	email?: string;
@@ -49,15 +50,11 @@ const wizard = createWizard<StepData, Context>("registration", {
 		{
 			label: "Terms & Conditions",
 			canGoNext: false, // must be explicitly enabled
-			preNext: async (data, { update, context }) => {
-				// Validate before proceeding
-				if (!data.agreed) {
-					throw new Error("You must agree to the terms");
-				}
+			preNext: async (data, { update }) => {
+				if (!data.agreed) throw new Error("You must agree to the terms");
 				update({ canGoNext: true });
 			},
 			prePrevious: async (_data, { update }) => {
-				// Reset validation state when going back
 				update({ canGoNext: false, data: { agreed: false } });
 			},
 		},
@@ -65,137 +62,170 @@ const wizard = createWizard<StepData, Context>("registration", {
 	],
 	context: { apiUrl: "https://api.example.com" },
 	onDone: async ({ steps, context }) => {
-		// Called when next() is invoked on the last step
 		const formData = steps.map((s) => s.data);
-		console.log("Submitting to", context.apiUrl, formData);
+		await fetch(context.apiUrl, {
+			method: "POST",
+			body: JSON.stringify(formData),
+		});
 	},
 });
 
-// Subscribe to state changes
-wizard.subscribe(({ step, steps, inProgress }) => {
-	// Step properties
-	const { label, index, data, canGoNext, error, isFirst, isLast } = step;
+wizard.subscribe(({ step, steps, inProgress, isDone }) => {
+	const { label, index, data, canGoNext, canGoPrevious, error, isFirst, isLast } = step;
 
-	// Update step state
 	step.update({ data: { name: "John" } });
 	step.update({ canGoNext: true });
 	step.update({ error: null });
+	step.clearError(); // convenience
 
-	// Functional updates
 	step.update({ data: (prev) => ({ ...prev, email: "john@example.com" }) });
 });
 
-// Wizard navigation API
-await wizard.next(); // Move to next step
-await wizard.next({ name: "John" }); // Move with data merge
-await wizard.previous(); // Move to previous step
-await wizard.reset(); // Reset to initial state
-await wizard.goto(2); // Jump to step index 2
-await wizard.goto(2, [null, { agreed: true }]); // Jump with step data
+await wizard.next();
+await wizard.next({ name: "John" });
+await wizard.previous();
+await wizard.reset();
+await wizard.goto(2);
+await wizard.goto(2, [null, { agreed: true }]);
 
-// Utility methods
-wizard.allowCanGoNext(); // Enable free navigation
-wizard.resetCanGoNext(); // Restore initial canGoNext values
-wizard.publish(); // Force state emission
+wizard.allowCanGoNext();
+wizard.resetCanGoNext();
+wizard.publish();
 
-// Access context and label
-wizard.context; // { apiUrl: "https://api.example.com" }
-wizard.label; // "registration"
+wizard.context;
+wizard.label;
 ```
 
-## API Overview
+## API overview
 
 ### `createWizard<TData, TContext>(label, options)`
 
-Creates a wizard instance with full TypeScript support.
+Creates a wizard instance.
 
 **Key options:**
 
-- `steps` - Array of step configurations (minimum 2 required)
-- `context` - Global context object (optional)
-- `onDone` - Callback when completing the last step
+- `steps` — array of step configurations (minimum 2 required)
+- `context` — global context object (optional)
+- `onDone` — callback when completing the last step
+- `preReset` — global reset callback (optional)
 
 **Navigation methods:**
 
-- `next(data?)` - Move to next step
-- `previous()` - Move to previous step
-- `reset()` - Reset to initial state
-- `goto(index, stepsData?, assert?)` - Jump to specific step
+- `next(data?)` — move to next step
+- `previous()` — move to previous step (respects `canGoPrevious`)
+- `reset()` — reset to initial state
+- `goto(index, stepsData?, assert?)` — jump to specific step
+
+**Store methods:**
+
+- `get()` — synchronous snapshot
+- `subscribe(cb)` — react to state changes
+- `publish()` — force a state emission
 
 **Utilities:**
 
-- `allowCanGoNext()` / `resetCanGoNext()` - Control navigation flags
-- `subscribe(callback)` - React to state changes
-- `get()` - Get current state synchronously
+- `allowCanGoNext()` / `resetCanGoNext()` — control forward gating flags
+- `step.update(values)` — update data / error / canGoNext / canGoPrevious
+- `step.clearError()` — clear step error
+- `resolveLabel(label, locale?)` — resolve a `Label` to a string
 
-For complete API documentation including all types and interfaces, see
-**[API.md](API.md)**.
+For complete API documentation, see **[API.md](API.md)**.
 
-## Hook Safety
+## Concurrency and hook safety
 
-Navigation methods (`next()`, `previous()`, `goto()`, `reset()`) **cannot be called from
-inside pre-hooks**. Attempting to do so will throw a `TypeError`.
+Navigation is **serialized**: while `next`, `previous`, `goto`, or `reset` is in-flight,
+any further navigation call — including a call made from inside a hook or `onDone` — is
+silently ignored and returns the current step index.
 
 ```typescript
-// ❌ This will throw TypeError
-const wizard = createWizard("foo", {
-	steps: [
-		{
-			label: "one",
-			preNext: async (_data, { wizard }) => {
-				await wizard.next(); // TypeError: Cannot call next() from inside pre-hooks
-			},
-		},
-		{ label: "two" },
-	],
-	onDone: async () => {},
+// Double-click safe — only advances once.
+button.onclick = () => wizard.next();
+
+// Inside a hook: silently ignored (does NOT throw, does NOT recurse).
+preNext: (async (_data, { wizard }) => {
+	await wizard.reset(); // no-op
 });
 ```
 
-### Safe operations inside hooks
-
-- `update()` - Modify step state (data, error, canGoNext)
-- `wizard.get()` - Read current state
-- `wizard.context` - Access/modify context
-- `wizard.label` - Read wizard label
-- `wizard.allowCanGoNext()` - Enable free navigation
-- `wizard.resetCanGoNext()` - Restore initial canGoNext values
-- `wizard.publish()` - Force state emission
-
 ### Deferred navigation
 
-If you need to trigger navigation based on hook logic, defer it using `setTimeout`:
+To navigate from a hook, schedule it for the next tick:
 
 ```typescript
-preNext: (async (_data, { wizard }) => {
-	// Deferred navigation (runs after hook completes)
+preNext: ((_data, { wizard }) => {
 	setTimeout(() => wizard.reset(), 0);
 });
 ```
 
-## Migration from v1.x
+## `isDone` and double-completion protection
+
+When `next()` is invoked on the last step and `onDone` completes successfully, `isDone`
+becomes `true`. Subsequent `next()` calls are no-ops until `previous()` or `reset()` is
+invoked.
 
 ```typescript
-// v1.x
-import { createWizardStore } from "@marianmeres/wizard";
-const wizard = createWizardStore("foo", { ... });
-step.set({ canGoNext: true });
-await step.next(data);
+wizard.subscribe(({ isDone }) => {
+	if (isDone) showSuccessScreen();
+});
 
-// v2.x
-import { createWizard } from "@marianmeres/wizard";
-const wizard = createWizard<MyData, MyContext>("foo", { ... });
-step.update({ canGoNext: true });
-await wizard.next(data); // navigation only via wizard, not step
+await wizard.next(); // triggers onDone; isDone → true
+await wizard.next(); // no-op; onDone NOT re-invoked
+await wizard.reset(); // isDone → false
 ```
 
-Key changes:
+If `onDone` throws, `isDone` stays `false`, allowing the user to retry.
 
-- `createWizardStore` → `createWizard`
-- `step.set()` → `step.update()`
-- `step.next()` / `step.previous()` removed (use `wizard.next()` / `wizard.previous()`)
-- `set` in hook context → `update`
-- Full generic type support
+## Error handling
+
+Errors thrown from hooks are captured on `step.error`:
+
+| Hook              | Captured on  | Blocks navigation?                          |
+| ----------------- | ------------ | ------------------------------------------- |
+| `preNext`         | Current step | Yes (forward)                               |
+| `prePrevious`     | Current step | No (back still proceeds)                    |
+| `preReset`        | —            | No (swallowed, logged if `logger` provided) |
+| `onDone`          | Last step    | Yes (stays on last step, `isDone` not set)  |
+| Global `preReset` | —            | No (swallowed)                              |
+
+## Migration from v2.x → v3.x
+
+v3 is a bug-fix / design-cleanup release. The API surface is mostly unchanged but several
+behaviors changed. Review each item:
+
+### Behavior changes (BC)
+
+1. **Navigation from inside hooks no longer throws `TypeError`** — calls are silently
+   ignored. Use `setTimeout(...)` if you need deferred navigation. If you were catching
+   `TypeError` from hook-reentry, remove the catch.
+
+2. **`next()` on the last step no longer re-runs `onDone`** after a successful completion.
+   `isDone` tracks completion. Call `reset()` or `previous()` to re-enable forward
+   navigation.
+
+3. **`step.update({ data: X })` always publishes** — the reference-equality short-circuit
+   was removed. In-place mutation plus `update({ data: step.data })` now publishes
+   correctly. Subscribers should already be idempotent.
+
+4. **`reset()` emits one transition** — previously, reset walked through each step index
+   and published every intermediate state. Now subscribers see `inProgress=true` then the
+   final reset state (step 0).
+
+5. **`previous()` respects the new `canGoPrevious` flag** on the current step (default
+   `true`; existing code is unaffected unless explicitly opted in).
+
+### New additions
+
+- `canGoPrevious?: boolean` on step config and `WizardStep`
+- `isDone: boolean` on the store value
+- `clearError()` on step
+- `resolveLabel(label, locale?)` helper
+- `step.update({ canGoPrevious })` support
+
+### Type-surface changes
+
+- `WizardStep` no longer extends `WizardStepConfig`. The raw hook properties (`preNext`,
+  `prePrevious`, `preReset`) are **not** present on the runtime step object. If your code
+  accessed them, switch to configuring them in step config.
 
 ## License
 

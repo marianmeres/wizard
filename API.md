@@ -4,7 +4,9 @@ Complete API documentation for `@marianmeres/wizard`.
 
 ## Table of Contents
 
-- [createWizard](#createwizard)
+- [Functions](#functions)
+  - [createWizard](#createwizard)
+  - [resolveLabel](#resolvelabel)
 - [Types](#types)
   - [Label](#label)
   - [Logger](#logger)
@@ -16,10 +18,13 @@ Complete API documentation for `@marianmeres/wizard`.
   - [CreateWizardOptions](#createwizardoptions)
   - [WizardStoreValue](#wizardstorevalue)
   - [Wizard](#wizard)
+- [Behavior](#behavior)
 
 ---
 
-## createWizard
+## Functions
+
+### createWizard
 
 ```typescript
 function createWizard<TData, TContext>(
@@ -30,29 +35,29 @@ function createWizard<TData, TContext>(
 
 Creates a wizard store for managing multi-step flows.
 
-### Type Parameters
+#### Type Parameters
 
 | Parameter  | Default                   | Description                                      |
 | ---------- | ------------------------- | ------------------------------------------------ |
 | `TData`    | `Record<string, unknown>` | The shape of step data (shared across all steps) |
 | `TContext` | `Record<string, unknown>` | The shape of the global context object           |
 
-### Parameters
+#### Parameters
 
 | Parameter | Type                                   | Description                      |
 | --------- | -------------------------------------- | -------------------------------- |
 | `label`   | `Label`                                | Human-readable wizard identifier |
 | `options` | `CreateWizardOptions<TData, TContext>` | Wizard configuration options     |
 
-### Returns
+#### Returns
 
-`Wizard<TData, TContext>` - A wizard instance with navigation methods and store interface.
+`Wizard<TData, TContext>` — A wizard instance with navigation methods and store interface.
 
-### Throws
+#### Throws
 
-- `TypeError` - If less than 2 steps are provided
+- `TypeError` — If less than 2 steps are provided.
 
-### Example
+#### Example
 
 ```typescript
 interface StepData {
@@ -77,9 +82,46 @@ const wizard = createWizard<StepData, Context>("registration", {
 	},
 });
 
-wizard.subscribe(({ step, steps, inProgress }) => {
+wizard.subscribe(({ step, steps, inProgress, isDone }) => {
 	// Update UI
 });
+```
+
+---
+
+### resolveLabel
+
+```typescript
+function resolveLabel(label: Label, locale?: string): string;
+```
+
+Resolves a [`Label`](#label) to a plain string.
+
+#### Parameters
+
+| Parameter | Type      | Description                                              |
+| --------- | --------- | -------------------------------------------------------- |
+| `label`   | `Label`   | The label to resolve                                     |
+| `locale`  | `string?` | Optional locale key for `Record<string,string>` variants |
+
+#### Returns
+
+`string` — The resolved label. Returns `""` if the label cannot be resolved.
+
+#### Resolution rules
+
+- `string` — returned as-is
+- `() => string` — invoked and result returned
+- `Record<string, string>` — value for `locale` if present, else first value, else `""`
+
+#### Example
+
+```typescript
+resolveLabel("Step 1"); // "Step 1"
+resolveLabel(() => "Step 1"); // "Step 1"
+resolveLabel({ en: "Step 1", de: "Schritt 1" }, "de"); // "Schritt 1"
+resolveLabel({ en: "Step 1", de: "Schritt 1" }, "fr"); // "Step 1" (first)
+resolveLabel({ en: "Step 1" }); // "Step 1"
 ```
 
 ---
@@ -92,21 +134,7 @@ wizard.subscribe(({ step, steps, inProgress }) => {
 type Label = string | Record<string, string> | (() => string);
 ```
 
-Human readable label - can be a simple string, i18n-like object `{ locale: label }`, or a
-function returning string.
-
-**Examples:**
-
-```typescript
-// Simple string
-const label1: Label = "Step 1";
-
-// i18n object
-const label2: Label = { en: "Step 1", de: "Schritt 1" };
-
-// Function
-const label3: Label = () => `Step ${getStepNumber()}`;
-```
+Human readable label. Use [`resolveLabel()`](#resolvelabel) to obtain a string.
 
 ---
 
@@ -116,8 +144,7 @@ const label3: Label = () => `Step ${getStepNumber()}`;
 type Logger = (...args: unknown[]) => void;
 ```
 
-Logger function signature for debugging. Receives arbitrary arguments that can be logged
-for debugging purposes.
+Logger function signature for debugging. Receives arbitrary arguments.
 
 ---
 
@@ -128,34 +155,28 @@ interface StepUpdateValues<TData> {
 	data?: TData | ((current: TData) => TData);
 	error?: Error | string | null;
 	canGoNext?: boolean;
+	canGoPrevious?: boolean;
 }
 ```
 
 Values that can be updated on a step via the `update()` method.
 
-| Property    | Type                                   | Description                                                                     |
-| ----------- | -------------------------------------- | ------------------------------------------------------------------------------- |
-| `data`      | `TData \| ((current: TData) => TData)` | Step data - can be a direct value or an updater function receiving current data |
-| `error`     | `Error \| string \| null`              | Error state - set to `null` to clear, `Error` or string to set                  |
-| `canGoNext` | `boolean`                              | Whether navigation to next step is allowed                                      |
+| Property        | Type                                   | Description                                                                                                  |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `data`          | `TData \| ((current: TData) => TData)` | Step data — direct value or updater function. **Always publishes when present** (see [Behavior](#behavior)). |
+| `error`         | `Error \| string \| null`              | Error state — `null` clears, `Error` or `string` sets                                                        |
+| `canGoNext`     | `boolean`                              | Whether forward navigation is allowed                                                                        |
+| `canGoPrevious` | `boolean`                              | Whether backward navigation is allowed                                                                       |
 
-**Examples:**
+#### Examples
 
 ```typescript
-// Direct value update
 step.update({ data: { name: "John" } });
-
-// Functional update
 step.update({ data: (prev) => ({ ...prev, count: prev.count + 1 }) });
-
-// Set error
 step.update({ error: new Error("Validation failed") });
-
-// Clear error
 step.update({ error: null });
-
-// Enable navigation
 step.update({ canGoNext: true });
+step.update({ canGoPrevious: false });
 ```
 
 ---
@@ -175,12 +196,11 @@ Hook context passed to all pre-action hooks (`preNext`, `prePrevious`, `preReset
 | Property  | Type                                        | Description                                   |
 | --------- | ------------------------------------------- | --------------------------------------------- |
 | `context` | `TContext`                                  | Global context object shared across all steps |
-| `update`  | `(values: StepUpdateValues<TData>) => void` | Update function to modify step state          |
+| `update`  | `(values: StepUpdateValues<TData>) => void` | Update function scoped to the hook's step     |
 | `wizard`  | `Wizard<TData, TContext>`                   | Reference to the wizard instance              |
 
-**Note:** Navigation methods (`next()`, `previous()`, `goto()`, `reset()`) cannot be
-called from within hooks. Attempting to do so throws a `TypeError`. Use `setTimeout` if
-you need deferred navigation.
+**Note:** Calling navigation methods (`next`, `previous`, `goto`, `reset`) from inside a
+hook is silently ignored — see [Behavior: concurrent navigation](#concurrent-navigation).
 
 ---
 
@@ -193,27 +213,16 @@ type PreHook<TData, TContext> = (
 ) => Promise<void> | void;
 ```
 
-Pre-action hook function signature. Hooks are called before navigation actions and can:
+Pre-action hook function. Hooks may validate data (throw to record an error), update step
+state via `ctx.update()`, read/mutate `ctx.context`, and perform async work.
 
-- Validate data and throw errors to prevent navigation
-- Update step state using `ctx.update()`
-- Access global context via `ctx.context`
-- Perform async operations (return a Promise)
-
-**Example:**
+#### Example
 
 ```typescript
 const preNext: PreHook<MyData, MyContext> = async (data, { update, context }) => {
-	if (!data.email) {
-		throw new Error("Email is required");
-	}
-
-	// Validate with external service
+	if (!data.email) throw new Error("Email is required");
 	const isValid = await validateEmail(data.email, context.apiUrl);
-	if (!isValid) {
-		throw new Error("Invalid email address");
-	}
-
+	if (!isValid) throw new Error("Invalid email address");
 	update({ canGoNext: true });
 };
 ```
@@ -227,6 +236,7 @@ interface WizardStepConfig<TData, TContext> {
 	label: Label;
 	data?: TData;
 	canGoNext?: boolean;
+	canGoPrevious?: boolean;
 	preNext?: PreHook<TData, TContext>;
 	prePrevious?: PreHook<TData, TContext>;
 	preReset?: PreHook<TData, TContext>;
@@ -235,14 +245,15 @@ interface WizardStepConfig<TData, TContext> {
 
 Configuration for a single wizard step.
 
-| Property      | Type                       | Default    | Description                                                 |
-| ------------- | -------------------------- | ---------- | ----------------------------------------------------------- |
-| `label`       | `Label`                    | _required_ | Human readable step label                                   |
-| `data`        | `TData`                    | `{}`       | Step-specific data, will be reset to initial state on reset |
-| `canGoNext`   | `boolean`                  | `true`     | Flag indicating whether wizard can proceed from this step   |
-| `preNext`     | `PreHook<TData, TContext>` | -          | Called before moving to next step                           |
-| `prePrevious` | `PreHook<TData, TContext>` | -          | Called before moving to previous step                       |
-| `preReset`    | `PreHook<TData, TContext>` | -          | Called before reset                                         |
+| Property        | Type                       | Default    | Description                                           |
+| --------------- | -------------------------- | ---------- | ----------------------------------------------------- |
+| `label`         | `Label`                    | _required_ | Human readable step label                             |
+| `data`          | `TData`                    | `{}`       | Step-specific data, restored on reset                 |
+| `canGoNext`     | `boolean`                  | `true`     | Whether forward navigation is allowed from this step  |
+| `canGoPrevious` | `boolean`                  | `true`     | Whether backward navigation is allowed from this step |
+| `preNext`       | `PreHook<TData, TContext>` | —          | Called before moving to next step                     |
+| `prePrevious`   | `PreHook<TData, TContext>` | —          | Called before moving to previous step                 |
+| `preReset`      | `PreHook<TData, TContext>` | —          | Called before reset                                   |
 
 ---
 
@@ -255,27 +266,29 @@ interface WizardStep<TData, TContext> {
 	data: TData;
 	error: Error | string | null;
 	canGoNext: boolean;
+	canGoPrevious: boolean;
 	isFirst: boolean;
 	isLast: boolean;
-	preNext?: PreHook<TData, TContext>;
-	prePrevious?: PreHook<TData, TContext>;
-	preReset?: PreHook<TData, TContext>;
 	update: (values: StepUpdateValues<TData>) => void;
+	clearError: () => void;
 }
 ```
 
-Runtime step instance with computed properties and bound update method.
+Runtime step instance. The raw hook functions (`preNext`, `prePrevious`, `preReset`) are
+**not** exposed here — they are held internally.
 
-| Property    | Type                                        | Description                                                |
-| ----------- | ------------------------------------------- | ---------------------------------------------------------- |
-| `label`     | `Label`                                     | Human readable step label                                  |
-| `index`     | `number`                                    | Zero-based index of this step                              |
-| `data`      | `TData`                                     | Step data (always initialized, never undefined at runtime) |
-| `error`     | `Error \| string \| null`                   | Current error state (null if no error)                     |
-| `canGoNext` | `boolean`                                   | Whether navigation to next step is allowed                 |
-| `isFirst`   | `boolean`                                   | Whether this is the first step                             |
-| `isLast`    | `boolean`                                   | Whether this is the last step                              |
-| `update`    | `(values: StepUpdateValues<TData>) => void` | Update this step's state                                   |
+| Property        | Type                                        | Description                            |
+| --------------- | ------------------------------------------- | -------------------------------------- |
+| `label`         | `Label`                                     | Human readable step label              |
+| `index`         | `number`                                    | Zero-based index of this step          |
+| `data`          | `TData`                                     | Step data                              |
+| `error`         | `Error \| string \| null`                   | Current error state (null if no error) |
+| `canGoNext`     | `boolean`                                   | Whether forward navigation is allowed  |
+| `canGoPrevious` | `boolean`                                   | Whether backward navigation is allowed |
+| `isFirst`       | `boolean`                                   | Whether this is the first step         |
+| `isLast`        | `boolean`                                   | Whether this is the last step          |
+| `update`        | `(values: StepUpdateValues<TData>) => void` | Update this step's state               |
+| `clearError`    | `() => void`                                | Convenience: clear this step's error   |
 
 ---
 
@@ -298,15 +311,13 @@ interface CreateWizardOptions<TData, TContext> {
 }
 ```
 
-Options for creating a wizard store.
-
-| Property   | Type                                  | Required | Description                                                                                                 |
-| ---------- | ------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `steps`    | `WizardStepConfig<TData, TContext>[]` | Yes      | Array of step configurations (minimum 2 required)                                                           |
-| `context`  | `TContext`                            | No       | Global context object accessible to all steps. Can be modified but won't be reset on reset/previous actions |
-| `preReset` | `(ctx) => Promise<void> \| void`      | No       | Called after all step preReset hooks during reset                                                           |
-| `onDone`   | `(ctx) => Promise<void> \| void`      | Yes      | Called when `next()` is invoked on the last step                                                            |
-| `logger`   | `Logger`                              | No       | Optional logger for debugging                                                                               |
+| Property   | Type                                  | Required | Description                                                 |
+| ---------- | ------------------------------------- | -------- | ----------------------------------------------------------- |
+| `steps`    | `WizardStepConfig<TData, TContext>[]` | Yes      | Array of step configurations (minimum 2 required)           |
+| `context`  | `TContext`                            | No       | Global context object. Mutable; not reset on `reset()`      |
+| `preReset` | `(ctx) => Promise<void> \| void`      | No       | Called after all per-step `preReset` hooks during `reset()` |
+| `onDone`   | `(ctx) => Promise<void> \| void`      | Yes      | Called when `next()` is invoked on the last step            |
+| `logger`   | `Logger`                              | No       | Optional logger for debugging                               |
 
 ---
 
@@ -317,16 +328,16 @@ interface WizardStoreValue<TData, TContext> {
 	step: WizardStep<TData, TContext>;
 	steps: WizardStep<TData, TContext>[];
 	inProgress: boolean;
+	isDone: boolean;
 }
 ```
 
-The value shape emitted by the wizard store.
-
-| Property     | Type                            | Description                               |
-| ------------ | ------------------------------- | ----------------------------------------- |
-| `step`       | `WizardStep<TData, TContext>`   | Current active step                       |
-| `steps`      | `WizardStep<TData, TContext>[]` | All steps array                           |
-| `inProgress` | `boolean`                       | Whether an async operation is in progress |
+| Property     | Type                            | Description                                                                         |
+| ------------ | ------------------------------- | ----------------------------------------------------------------------------------- |
+| `step`       | `WizardStep<TData, TContext>`   | Current active step                                                                 |
+| `steps`      | `WizardStep<TData, TContext>[]` | All steps                                                                           |
+| `inProgress` | `boolean`                       | Whether an async operation (hook/onDone/reset) is in progress                       |
+| `isDone`     | `boolean`                       | `true` after `onDone` completes successfully. Cleared by `previous()` and `reset()` |
 
 ---
 
@@ -352,8 +363,6 @@ interface Wizard<TData, TContext> {
 }
 ```
 
-The wizard instance returned by `createWizard`.
-
 #### Properties
 
 | Property  | Type       | Description                     |
@@ -363,7 +372,7 @@ The wizard instance returned by `createWizard`.
 
 #### Methods
 
-##### get()
+##### `get()`
 
 ```typescript
 get(): WizardStoreValue<TData, TContext>
@@ -371,55 +380,63 @@ get(): WizardStoreValue<TData, TContext>
 
 Get current store value synchronously.
 
-##### subscribe()
+##### `subscribe(callback)`
 
 ```typescript
 subscribe(callback: (value: WizardStoreValue<TData, TContext>) => void): () => void
 ```
 
-Subscribe to store changes. The callback is called immediately with current value and on
-every subsequent change. Returns an unsubscribe function.
+Subscribe to store changes. Callback is called immediately with current value and on every
+subsequent change. Returns an unsubscribe function.
 
-##### next()
+##### `next(currentStepData?)`
 
 ```typescript
 next(currentStepData?: Partial<TData>): Promise<number>
 ```
 
 Move to next step, optionally passing data to merge with current step's data. Returns the
-new step index.
+resulting step index.
 
 - Runs the current step's `preNext` hook
-- If `canGoNext` is false after hook, sets an error and stays on current step
-- If on last step, calls `onDone` instead of advancing
-- Clears any existing error on successful navigation
+- If `canGoNext` is false or the hook sets/throws an error, navigation is blocked (step
+  stays current)
+- On the last step, runs `onDone`. If it succeeds, sets `isDone = true`
+- When `isDone` is true, subsequent `next()` calls are no-ops until `previous()` or
+  `reset()` is called
+- Clears any existing error on the destination step after a successful advance
 
-##### previous()
+##### `previous()`
 
 ```typescript
 previous(): Promise<number>
 ```
 
-Move to previous step. Returns the new step index.
+Move to previous step. Returns the resulting step index.
 
 - Runs the current step's `prePrevious` hook
-- Always goes back regardless of errors (errors are captured but don't prevent navigation)
-- Does nothing if already on first step
+- Blocked silently if `canGoPrevious` is `false` on the current step
+- `prePrevious` errors are captured on the current step but do NOT block navigation
+  (consistent with v2)
+- Clears the destination step's error on arrival
+- Clears `isDone` when actually moving
 
-##### reset()
+##### `reset()`
 
 ```typescript
 reset(): Promise<number>
 ```
 
-Reset wizard to initial state. Returns 0 (first step index).
+Reset wizard to initial state. Returns `0`.
 
-- Runs `preReset` hook for each step from current to first
-- Runs global `preReset` hook
-- Restores all step data and `canGoNext` flags to initial values
-- Errors in hooks are swallowed (logged if logger provided)
+- Runs each per-step `preReset` hook (in reverse order, from current down to 0)
+- Runs the global `preReset` hook
+- Restores all step `data`, `canGoNext`, and `canGoPrevious` to their configured values
+- Clears all step errors and `isDone`
+- Errors in `preReset` hooks are swallowed (logged when a `logger` is provided)
+- Emits a single state transition to step `0` (no per-step intermediate flicker)
 
-##### goto()
+##### `goto(targetIndex, stepsData?, assert?)`
 
 ```typescript
 goto(
@@ -429,113 +446,102 @@ goto(
 ): Promise<number>
 ```
 
-Jump to specific step index. Returns the actual step index reached.
+Jump to specific step index. Returns the actual index reached.
 
-| Parameter     | Type                         | Default | Description                                                  |
-| ------------- | ---------------------------- | ------- | ------------------------------------------------------------ |
-| `targetIndex` | `number`                     | -       | Target step index (zero-based)                               |
-| `stepsData`   | `(Partial<TData> \| null)[]` | `[]`    | Optional data to pass to each step during forward navigation |
-| `assert`      | `boolean`                    | `true`  | If true, throws error when navigation is blocked             |
+| Parameter     | Type                         | Default | Description                                                                                                           |
+| ------------- | ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| `targetIndex` | `number`                     | —       | Target step index (zero-based). Throws `RangeError` if out of bounds                                                  |
+| `stepsData`   | `(Partial<TData> \| null)[]` | `[]`    | Data to merge per step during **forward** navigation. Indexed by **absolute step index**. Ignored when going backward |
+| `assert`      | `boolean`                    | `true`  | If `true`, throws `Error` when navigation is blocked                                                                  |
 
-- When going forward: calls `next()` for each step with provided data
-- When going backward: calls `previous()` for each step
-- Throws `RangeError` if index is out of bounds
-- Throws `Error` if blocked and `assert` is true
+- Forward: iteratively calls `next()` for each step with the corresponding `stepsData`
+  entry
+- Backward: iteratively calls `previous()`. Respects `canGoPrevious` — blocked if any
+  intermediate step disallows going back
+- Throws `RangeError` when `targetIndex` is out of range
+- Throws `Error` if navigation cannot progress toward the target (when `assert` is `true`)
 
-##### allowCanGoNext()
+##### `allowCanGoNext()`
 
 ```typescript
 allowCanGoNext(): number
 ```
 
-Allow free navigation by setting all `canGoNext` flags to true. Returns current step
-index.
+Set all steps' `canGoNext` to `true`. Returns current step index.
 
-##### resetCanGoNext()
+##### `resetCanGoNext()`
 
 ```typescript
 resetCanGoNext(): number
 ```
 
-Reset `canGoNext` flags to their initial values. Returns current step index.
+Restore all `canGoNext` flags to their configured initial values. Returns current step
+index.
 
-##### publish()
+##### `publish()`
 
 ```typescript
 publish(): number
 ```
 
-Explicitly publish current state (triggers subscribers). Returns current step index.
+Force a state emission. Returns current step index.
 
 ---
 
-## Hook Safety
+## Behavior
 
-Navigation methods (`next()`, `previous()`, `goto()`, `reset()`) **cannot be called from
-inside pre-hooks**. This prevents infinite loops and unpredictable state.
+### Concurrent navigation
 
-```typescript
-// This will throw TypeError
-preNext: (async (_data, { wizard }) => {
-	await wizard.next(); // TypeError!
-});
-```
+All navigation methods (`next`, `previous`, `goto`, `reset`) are serialized via a single
+in-flight guard. While one call is executing, further calls — **including calls made from
+inside hooks or `onDone`** — are silently ignored and return the current step index.
 
-### Safe Operations Inside Hooks
+- Clicking a "Next" button twice will only advance once.
+- Calling `wizard.reset()` from inside a `preNext` hook has no effect.
 
-- `update()` - Modify step state
-- `wizard.get()` - Read current state
-- `wizard.context` - Access/modify context
-- `wizard.label` - Read wizard label
-- `wizard.allowCanGoNext()` - Enable free navigation
-- `wizard.resetCanGoNext()` - Restore initial flags
-- `wizard.publish()` - Force state emission
-
-### Deferred Navigation
-
-If you need navigation based on hook logic:
+If you need deferred navigation from a hook, schedule it:
 
 ```typescript
-preNext: (async (_data, { wizard }) => {
+preNext: ((_data, { wizard }) => {
 	setTimeout(() => wizard.reset(), 0);
 });
 ```
 
----
+### `update({ data })` always publishes
 
-## Error Handling
+When `data` is present in `update()`, subscribers are notified unconditionally — even if
+the value is the same reference as before. This prevents a common pitfall where in-place
+mutation (`step.data.items.push(...)`) combined with `update({ data: step.data })` would
+silently no-op.
 
-Errors in hooks are captured and stored in `step.error`:
+### Error handling
 
-```typescript
-wizard.subscribe(({ step }) => {
-	if (step.error) {
-		console.error("Step error:", step.error);
-	}
-});
-```
+Errors thrown from hooks are captured in `step.error`:
 
-- `preNext` errors: Prevent forward navigation, step stays current
-- `prePrevious` errors: Captured but navigation proceeds
-- `preReset` errors: Swallowed (logged if logger provided)
-- `onDone` errors: Captured on last step
+| Hook / Callback  | Captured on  | Blocks navigation?                         |
+| ---------------- | ------------ | ------------------------------------------ |
+| `preNext`        | Current step | Yes — forward blocked                      |
+| `prePrevious`    | Current step | No — back still proceeds                   |
+| `preReset`       | —            | No (swallowed; logger can see)             |
+| `onDone`         | Last step    | Yes — stays on last step, `isDone` not set |
+| `globalPreReset` | —            | No (swallowed)                             |
 
----
+### `isDone` lifecycle
 
-## Store Compatibility
+- Initially `false`.
+- Set to `true` when `onDone` completes successfully.
+- While `true`, `next()` is a no-op.
+- Cleared by any successful `previous()` or `reset()`.
 
-The wizard implements a store-compatible interface, making it work with reactive UI
-frameworks:
+### Store compatibility
+
+The wizard implements a store-compatible interface (`get`, `subscribe`) suitable for
+reactive UI frameworks:
 
 ```typescript
 // Svelte
-$: ({ step, steps, inProgress } = $wizard);
-
-// React (with @marianmeres/store adapter)
-const { step, steps, inProgress } = useStore(wizard);
+$: ({ step, steps, inProgress, isDone } = $wizard);
 
 // Vanilla JS
-const unsubscribe = wizard.subscribe(({ step }) => {
-	render(step);
-});
+const unsubscribe = wizard.subscribe(({ step }) => render(step));
 ```
